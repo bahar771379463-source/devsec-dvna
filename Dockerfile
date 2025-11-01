@@ -1,6 +1,6 @@
 # Damn Vulnerable NodeJS Application
 
-FROM node:20
+FROM node:14
 LABEL MAINTAINER "Subash SN"
 
 WORKDIR /app
