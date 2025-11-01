@@ -1,6 +1,6 @@
 # Damn Vulnerable NodeJS Application
 
-FROM node:carbon-alpinejj
+FROM node:20
 LABEL MAINTAINER "Subash SN"
 
 WORKDIR /app
