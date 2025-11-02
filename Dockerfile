@@ -4,6 +4,8 @@ WORKDIR /app
 
 COPY package*.json ./
 
+RUN rm -rf node_modules package-lock.json
+
 RUN apt-get update && apt-get install -y python3 make g++ \
     && npm install
 
