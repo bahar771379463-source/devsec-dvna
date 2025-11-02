@@ -9,7 +9,6 @@ COPY . .
 
 # تحديث النظام وتثبيت أدوات البناء
 RUN apt-get update && apt-get install -y python3 make g++ \
-    && npm uninstall libxmljs \
     && npm install libxmljs2 \
     && npm install \
     && chmod +x /app/entrypoint.sh
