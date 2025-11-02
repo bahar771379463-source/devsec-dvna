@@ -1,19 +1,26 @@
-# Damn Vulnerable NodeJS Application
+FROM node:20-bullseye
 
-FROM node:14
-LABEL MAINTAINER "Subash SN"
-
+# إعداد مجلد العمل داخل الحاوية
 WORKDIR /app
 
+# نسخ ملفات المشروع
 COPY . .
 
-RUN sed -i 's|deb.debian.org/debian|archive.debian.org/debian|g' /etc/apt/sources.list && \
-    sed -i '/security.debian.org/d' /etc/apt/sources.list && \
-    apt-get -o Acquire::Check-Valid-Until=false update && \
-    apt-get install -y python3 make g++
-
-
+# تحديث النظام وتثبيت الأدوات اللازمة للبناء
 RUN apt-get update && apt-get install -y python3 make g++ && \
-    chmod +x /app/entrypoint.sh && npm install
+    rm -rf /var/lib/apt/lists/*
 
-CMD ["bash", "/app/entrypoint.sh"]
+# حذف libxmljs القديم وتثبيت النسخة الحديثة الآمنة
+
+
+# التأكد من أن السكربت التنفيذي قابل للتشغيل
+RUN chmod +x /app/entrypoint.sh
+
+# تثبيت بقية الاعتمادات
+RUN npm install
+
+# فتح المنفذ 9090
+EXPOSE 9090
+
+# تشغيل التطبيق
+CMD ["npm", "start"]
