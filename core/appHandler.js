@@ -2,7 +2,7 @@ var db = require('../models')
 var bCrypt = require('bcrypt')
 const exec = require('child_process').exec;
 var mathjs = require('mathjs')
-var libxmljs = require("libxmljs");
+var libxmljs = require("libxmljs2");
 var serialize = require("node-serialize")
 const Op = db.Sequelize.Op
 
@@ -125,7 +125,7 @@ module.exports.modifyProductSubmit = function (req, res) {
 			output = {
 				product: product
 			}
-			req.flash('danger',err)
+			req.flash('danger', err)
 			res.render('app/modifyproduct', {
 				output: output
 			})
@@ -145,22 +145,22 @@ module.exports.userEditSubmit = function (req, res) {
 	db.User.find({
 		where: {
 			'id': req.body.id
-		}		
-	}).then(user =>{
-		if(req.body.password.length>0){
-			if(req.body.password.length>0){
+		}
+	}).then(user => {
+		if (req.body.password.length > 0) {
+			if (req.body.password.length > 0) {
 				if (req.body.password == req.body.cpassword) {
 					user.password = bCrypt.hashSync(req.body.password, bCrypt.genSaltSync(10), null)
-				}else{
+				} else {
 					req.flash('warning', 'Passwords dont match')
 					res.render('app/useredit', {
 						userId: req.user.id,
 						userEmail: req.user.email,
 						userName: req.user.name,
 					})
-					return		
+					return
 				}
-			}else{
+			} else {
 				req.flash('warning', 'Invalid Password')
 				res.render('app/useredit', {
 					userId: req.user.id,
@@ -173,7 +173,7 @@ module.exports.userEditSubmit = function (req, res) {
 		user.email = req.body.email
 		user.name = req.body.name
 		user.save().then(function () {
-			req.flash('success',"Updated successfully")
+			req.flash('success', "Updated successfully")
 			res.render('app/useredit', {
 				userId: req.body.id,
 				userEmail: req.body.email,
@@ -212,11 +212,11 @@ module.exports.listUsersAPI = function (req, res) {
 	})
 }
 
-module.exports.bulkProductsLegacy = function (req,res){
+module.exports.bulkProductsLegacy = function (req, res) {
 	// TODO: Deprecate this soon
-	if(req.files.products){
+	if (req.files.products) {
 		var products = serialize.unserialize(req.files.products.data.toString('utf8'))
-		products.forEach( function (product) {
+		products.forEach(function (product) {
 			var newProduct = new db.Product()
 			newProduct.name = product.name
 			newProduct.code = product.code
@@ -225,15 +225,15 @@ module.exports.bulkProductsLegacy = function (req,res){
 			newProduct.save()
 		})
 		res.redirect('/app/products')
-	}else{
-		res.render('app/bulkproducts',{messages:{danger:'Invalid file'},legacy:true})
+	} else {
+		res.render('app/bulkproducts', { messages: { danger: 'Invalid file' }, legacy: true })
 	}
 }
 
-module.exports.bulkProducts =  function(req, res) {
-	if (req.files.products && req.files.products.mimetype=='text/xml'){
-		var products = libxmljs.parseXmlString(req.files.products.data.toString('utf8'), {noent:true,noblanks:true})
-		products.root().childNodes().forEach( product => {
+module.exports.bulkProducts = function (req, res) {
+	if (req.files.products && req.files.products.mimetype == 'text/xml') {
+		var products = libxmljs.parseXmlString(req.files.products.data.toString('utf8'), { noent: true, noblanks: true })
+		products.root().childNodes().forEach(product => {
 			var newProduct = new db.Product()
 			newProduct.name = product.childNodes()[0].text()
 			newProduct.code = product.childNodes()[1].text()
@@ -242,7 +242,7 @@ module.exports.bulkProducts =  function(req, res) {
 			newProduct.save()
 		})
 		res.redirect('/app/products')
-	}else{
-		res.render('app/bulkproducts',{messages:{danger:'Invalid file'},legacy:false})
+	} else {
+		res.render('app/bulkproducts', { messages: { danger: 'Invalid file' }, legacy: false })
 	}
 }
