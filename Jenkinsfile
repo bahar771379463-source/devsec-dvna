@@ -1,39 +1,40 @@
 pipeline {
-  agent any
+    agent any
 
-  stages {
-    stage('Clone Repository') {
-      steps {
-        echo "📥 جاري سحب الكود من GitHub"
-        checkout scm
-      }
+    stages {
+        stage('Checkout') {
+            steps {
+                echo '📥 Cloning repository...'
+                git 'https://github.com/yourusername/dvna.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo '🛠 Building Docker image...'
+                sh 'docker build -t dvna:latest .'
+            }
+        }
+
+        stage('Run Container') {
+            steps {
+                echo '🚀 Running DVNA container...'
+                sh 'docker run -d -p 9090:9090 --name dvna dvna:latest'
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                echo '✅ Verifying container...'
+                sh 'docker ps'
+            }
+        }
     }
 
-    stage('Build Docker Image') {
-      steps {
-        echo "⚙ بناء صورة Docker"
-        sh '''
-          docker build -t myapp:latest .
-        '''
-      }
+    post {
+        always {
+            echo '🧹 Cleaning up...'
+            sh 'docker rm -f dvna || true'
+        }
     }
-
-    stage('Push to DockerHub') {
-      steps {
-        echo "🚀 رفع الصورة إلى DockerHub"
-        sh '''
-          echo "هنا لاحقاً بنضيف أوامر تسجيل الدخول إلى DockerHub"
-        '''
-      }
-    }
-
-    stage('Deploy to Test Server') {
-      steps {
-        echo "📦 نشر التطبيق إلى سيرفر الاختبار"
-        sh '''
-          echo "هنا لاحقاً بنضيف أوامر النشر الفعلية"
-        '''
-      }
-    }
-  }
 }
