@@ -1,16 +1,21 @@
 FROM node:20-bullseye
 
+# إعداد بيئة العمل
 WORKDIR /app
 
+# نسخ الملفات
 COPY package*.json ./
-
-RUN rm -rf node_modules package-lock.json
-
-RUN apt-get update && apt-get install -y python3 make g++ \
-    && npm install
-
 COPY . .
 
+# تحديث النظام وتثبيت أدوات البناء
+RUN apt-get update && apt-get install -y python3 make g++ \
+    && npm uninstall libxmljs \
+    && npm install libxmljs2 \
+    && npm install \
+    && chmod +x /app/entrypoint.sh
+
+# فتح المنفذ
 EXPOSE 9090
 
+# أمر التشغيل
 CMD ["npm", "start"]
