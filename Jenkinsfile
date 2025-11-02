@@ -5,7 +5,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo '📥 Cloning repository...'
-                git 'https://github.com/yourusername/dvna.git'
+                git 'https://github.com/bahar771379463-source/devsec-dvna.git'
             }
         }
 
