@@ -4,7 +4,6 @@ pipeline {
     environment {
         APP_NAME = "dvna"
         APP_PORT = "9090"
-        APP_PATH = "/home/bahar/dvna"
     }
 
     stages {
