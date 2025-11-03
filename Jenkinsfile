@@ -2,59 +2,59 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "dvna"
-        APP_PORT = "9090"
-        APP_PATH = "/home/bahar/dvna"
+        IMAGE_NAME = "dvna"
+        CONTAINER_NAME = "dvna"
+        DOCKERHUB_USER = "bahar771379463"  // غيّرها لو حسابك غير هذا
     }
 
     stages {
-
-        stage('🧹 Clean Up Old Container') {
+        stage('Checkout') {
             steps {
-                echo "🔄 إزالة أي حاويات قديمة..."
+                echo '📥 Cloning repository...'
+                git branch: 'main',
+                    credentialsId: 'github-credentials',
+                    url: 'https://github.com/bahar771379463-source/devsec-dvna.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo '🔨 Building Docker image...'
+                sh 'docker build -t ${IMAGE_NAME}:latest .'
+            }
+        }
+
+        stage('Run Container') {
+            steps {
+                echo '🚀 Running container...'
+                // احذف الحاوية القديمة إن وجدت
                 sh '''
-                    docker stop $APP_NAME || true
-                    docker rm -f $APP_NAME || true
+                    docker rm -f ${CONTAINER_NAME} || true
+                    docker run -d -p 9090:9090 --name ${CONTAINER_NAME} ${IMAGE_NAME}:latest npm start
                 '''
             }
         }
 
-        stage('🧱 Build Docker Image') {
+        stage('Verify') {
             steps {
-                echo "🏗 جاري بناء الصورة من المجلد المحلي..."
-                dir("${APP_PATH}") {
-                    sh '''
-                        docker build -t ${APP_NAME}:latest .
-                    '''
-                }
-            }
-        }
-
-        stage('🚀 Run Container') {
-            steps {
-                echo "🚀 تشغيل الحاوية الآن..."
-                sh '''
-                    docker run -d -p ${APP_PORT}:9090 --name ${APP_NAME} ${APP_NAME}:latest
-                '''
-            }
-        }
-
-        stage('✅ Verify Running') {
-            steps {
-                echo "🔍 التحقق من أن الحاوية تعمل..."
-                sh '''
-                    docker ps | grep ${APP_NAME} || (echo "❌ الحاوية لم تعمل!" && exit 1)
-                '''
+                echo '🧪 Verifying container status...'
+                sh 'sleep 5'
+                sh 'docker ps'
+                sh 'curl -I http://localhost:9090 || true'
             }
         }
     }
 
     post {
+        always {
+            echo '🧹 Cleaning up...'
+            sh 'docker rm -f ${CONTAINER_NAME} || true'
+        }
         success {
-            echo "🎉 تم بناء وتشغيل DVNA بنجاح على المنفذ ${APP_PORT}"
+            echo '✅ Pipeline completed successfully!'
         }
         failure {
-            echo "❌ حدث خطأ أثناء البناء أو التشغيل"
+            echo '❌ Pipeline failed. Check the logs for details.'
         }
     }
 }
