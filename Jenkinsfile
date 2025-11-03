@@ -4,6 +4,7 @@ pipeline {
     environment {
         APP_NAME = "dvna"
         APP_PORT = "9090"
+        APP_PATH = "/home/bahar/dvna"
     }
 
     stages {
@@ -21,7 +22,7 @@ pipeline {
         stage('🧱 Build Docker Image') {
             steps {
                 echo "🏗 جاري بناء الصورة من المجلد المحلي..."
-             {
+                dir("${APP_PATH}") {
                     sh '''
                         docker build -t ${APP_NAME}:latest .
                     '''
