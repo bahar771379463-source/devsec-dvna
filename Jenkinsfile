@@ -20,7 +20,7 @@ pipeline {
             steps {
                 echo "🔨 Building Docker image..."
                 sh """
-                    docker build -t $DOCKER_IMAGE .
+                docker build --no-cache -t $DOCKER_IMAGE .
                 """
             }
         }
