@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "dvna:latest"
-        CONTAINER_NAME = "dvna-container"
+        CONTAINER_NAME = "dvna"
     }
 
     stages {
