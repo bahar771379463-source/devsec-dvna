@@ -1,19 +1,21 @@
 FROM node:20-bullseye
 
-# تحديد مجلد العمل
+# إعداد بيئة العمل
 WORKDIR /app
 
-# نسخ ملفات package.json و package-lock.json أولًا
+# نسخ الملفات
 COPY package*.json ./
-
-# تثبيت الأدوات اللازمة للبناء وحزم npm
-# ملاحظة: لا نقوم بترقية npm لتجنب مشاكل engine
-RUN apt-get update && \
-    apt-get install -y python3 make g++ libxml2-dev && \
-    npm install
-
-# نسخ باقي ملفات المشروع
 COPY . .
 
-# أمر التشغيل الافتراضي
+# تحديث النظام وتثبيت أدوات البناء
+RUN apt-get update && apt-get install -y python3 make g++ \
+    && npm uninstall libxmljs \
+    && npm install libxmljs2 \
+    && npm install \
+    && chmod +x /app/entrypoint.sh
+
+# فتح المنفذ
+EXPOSE 9090
+
+# أمر التشغيل
 CMD ["npm", "start"]
