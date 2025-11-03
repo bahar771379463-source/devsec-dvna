@@ -27,15 +27,10 @@ pipeline {
 
         stage('Run Docker Container') {
             steps {
-                echo "▶ Running Docker container..."
-                sh """
-                    # إزالة أي حاويات قديمة
-                    if [ \$(docker ps -aq -f name=$CONTAINER_NAME) ]; then
-                        docker rm -f $CONTAINER_NAME
-                    fi
-                    # تشغيل الحاوية
-                    docker run -d --name $CONTAINER_NAME -p 3000:3000 $DOCKER_IMAGE
-                """
+                docker ps -aq -f name=dvna | grep . && docker rm -f dvna || echo "No container to remove"
+                    docker run -d --name dvna -p 3000:3000 dvna:latest
+                    
+               
             }
         }
     }
