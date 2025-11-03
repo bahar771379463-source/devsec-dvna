@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        // اسم الصورة التي سنبنيها
         DOCKER_IMAGE = "dvna:latest"
+        CONTAINER_NAME = "dvna-container"
     }
 
     stages {
@@ -29,12 +29,12 @@ pipeline {
             steps {
                 echo "▶ Running Docker container..."
                 sh """
-                    # تحقق من عدم وجود حاويات قديمة
-                    if [ \$(docker ps -aq -f name=dvna-container) ]; then
-                        docker rm -f dvna-container
+                    # إزالة أي حاويات قديمة
+                    if [ \$(docker ps -aq -f name=$CONTAINER_NAME) ]; then
+                        docker rm -f $CONTAINER_NAME
                     fi
                     # تشغيل الحاوية
-                    docker run -d --name dvna-container -p 3000:3000 $DOCKER_IMAGE
+                    docker run -d --name $CONTAINER_NAME -p 3000:3000 $DOCKER_IMAGE
                 """
             }
         }
