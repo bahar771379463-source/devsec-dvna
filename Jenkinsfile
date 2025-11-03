@@ -6,6 +6,8 @@ pipeline {
         NAME = "dvna"
         GIT_REPO = "https://github.com/bahar771379463-source/devsec-dvna.git"
         GIT_CREDENTIALS = "github-credentials"
+        VAULT_ADDR = "http://192.168.1.2:8200"    // ← غيّرها إلى عنوان خادم Vault
+        VAULT_CRED = "vault-root-tokin"             // ← هذا الـ Credential ID داخل Jenkins
     }
 
     stages {
@@ -25,17 +27,37 @@ pipeline {
             }
         }
 
+        stage('Push to Docker Hub') {
+            steps {
+                echo "🔐 Fetching Docker Hub credentials from Vault..."
+                withVault(configuration: [vaultUrl: "${VAULT_ADDR}",
+                                          vaultCredentialId: "${VAULT_CRED}",
+                                          engineVersion: 2],
+                          vaultSecrets: [[path: 'secret/dockerhub',
+                                          secretValues: [
+                                              [envVar: 'DOCKER_USER', vaultKey: 'username'],
+                                              [envVar: 'DOCKER_PASS', vaultKey: 'password']
+                                          ]]
+                         ]) {
+                    sh '''
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    docker tag ${IMAGE_NAME} ${DOCKER_USER}/${IMAGE_NAME}
+                    docker push ${DOCKER_USER}/${IMAGE_NAME}
+                    docker logout
+                    '''
+                }
+            }
+        }
+
         stage('Run Docker Container') {
             steps {
                 echo "▶ Running Docker container..."
                 sh '''
-                # حذف أي حاوية موجودة باسم ${NAME}
                 if [ $(docker ps -aq -f name=${NAME}) ]; then
                     docker rm -f ${NAME}
                 fi
 
-                # تشغيل الحاوية الجديدة
-                docker run -d --name ${NAME} -p 9090:9090 ${IMAGE_NAME}
+                docker run -d --name ${NAME} -p 9090:9090 ${DOCKER_USER}/${IMAGE_NAME}
                 '''
             }
         }
