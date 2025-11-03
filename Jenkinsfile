@@ -2,53 +2,59 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "dvna:latest"
-        CONTAINER_NAME = "dvna"
+        APP_NAME = "dvna"
+        APP_PORT = "9090"
+        APP_PATH = "/home/bahar/dvna"
     }
 
     stages {
-        stage('Preparation') {
+
+        stage('🧹 Clean Up Old Container') {
             steps {
-                echo "🔧 Cleaning old containers and images if exist..."
+                echo "🔄 إزالة أي حاويات قديمة..."
                 sh '''
-                    docker rm -f $CONTAINER_NAME || true
-                    docker rmi -f $IMAGE_NAME || true
+                    docker stop $APP_NAME || true
+                    docker rm -f $APP_NAME || true
                 '''
             }
         }
 
-        stage('Build Docker Image') {
+        stage('🧱 Build Docker Image') {
             steps {
-                dir('dvna') { // نضمن أن Jenkins داخل مجلد المشروع الصحيح
-                    echo "🚧 Building Docker image..."
-                    sh 'docker build -t $IMAGE_NAME .'
+                echo "🏗 جاري بناء الصورة من المجلد المحلي..."
+                dir("${APP_PATH}") {
+                    sh '''
+                        docker build -t ${APP_NAME}:latest .
+                    '''
                 }
             }
         }
 
-        stage('Run Container') {
+        stage('🚀 Run Container') {
             steps {
-                echo "🚀 Running DVNA container..."
+                echo "🚀 تشغيل الحاوية الآن..."
                 sh '''
-                    docker run -d --name $CONTAINER_NAME -p 9090:9090 $IMAGE_NAME
+                    docker run -d -p ${APP_PORT}:9090 --name ${APP_NAME} ${APP_NAME}:latest
                 '''
             }
         }
 
-        stage('Verify') {
+        stage('✅ Verify Running') {
             steps {
-                echo "✅ Checking if container is running..."
-                sh 'docker ps | grep dvna || (echo "DVNA not running!" && exit 1)'
+                echo "🔍 التحقق من أن الحاوية تعمل..."
+                sh '''
+                    docker ps | grep ${APP_NAME} || (echo "❌ الحاوية لم تعمل!" && exit 1)
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "🎉 DVNA is up and running at http://<your-server-ip>:9090"
+            echo "🎉 تم بناء وتشغيل DVNA بنجاح على المنفذ ${APP_PORT}"
         }
         failure {
-            echo "❌ Build or run failed. Check logs above."
+            echo "❌ حدث خطأ أثناء البناء أو التشغيل"
         }
     }
 }
