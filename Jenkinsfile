@@ -6,8 +6,8 @@ pipeline {
         NAME = "dvna"
         GIT_REPO = "https://github.com/bahar771379463-source/devsec-dvna.git"
         GIT_CREDENTIALS = "github-credentials"
-        VAULT_ADDR = "http://192.168.1.2:8200"    // ← غيّرها إلى عنوان خادم Vault
-        VAULT_CRED = "vault-root-tokin"             // ← هذا الـ Credential ID داخل Jenkins
+        VAULT_ADDR = "http://192.168.1.2:8200"    
+        VAULT_CRED = "vault-root-tokin"             
     }
 
     stages {
@@ -33,7 +33,7 @@ pipeline {
                 withVault(configuration: [vaultUrl: "${VAULT_ADDR}",
                                           vaultCredentialId: "${VAULT_CRED}",
                                           engineVersion: 2],
-                          vaultSecrets: [[path: 'secret/dockerhub',
+                          vaultSecrets: [[path: 'secret/docker-credentials',
                                           secretValues: [
                                               [envVar: 'DOCKER_USER', vaultKey: 'username'],
                                               [envVar: 'DOCKER_PASS', vaultKey: 'password']
