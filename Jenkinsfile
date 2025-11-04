@@ -22,6 +22,8 @@ pipeline {
             steps {
                 echo "🔨 Building Docker image..."
                 sh '''
+                docker pull ${IMAGE_NAME} || true
+
                 docker build -t ${IMAGE_NAME} . || exit 1
                 '''
             }
