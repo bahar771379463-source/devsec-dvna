@@ -57,7 +57,7 @@ pipeline {
                     docker rm -f ${NAME}
                 fi
 
-                docker run -d --name ${NAME} -p 9090:9090 ${DOCKER_USER}/${IMAGE_NAME}
+                docker run -d --name ${NAME} -p 9090:9090 bahar771379463/bahar771379:latest
                 '''
             }
         }
