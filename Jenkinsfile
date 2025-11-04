@@ -41,8 +41,8 @@ pipeline {
                          ]) {
                     sh '''
                     echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    docker tag ${IMAGE_NAME} ${DOCKER_USER}/${IMAGE_NAME}
-                    docker push ${DOCKER_USER}/${IMAGE_NAME}
+                    docker tag ${IMAGE_NAME} bahar771379463/bahar771379:latest
+                    docker push bahar771379463/bahar771379:latest
                     docker logout
                     '''
                 }
