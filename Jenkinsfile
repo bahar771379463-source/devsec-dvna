@@ -22,9 +22,9 @@ pipeline {
             steps {
                 echo "🔨 Building Docker image..."
                 sh '''
-                docker pull ${IMAGE_NAME} || true
+                docker pull bahar771379463/bahar771379:latest || true
 
-                docker build -t ${IMAGE_NAME} . || exit 1
+                docker build --cache-from=bahar771379463/bahar771379:latest -t dvna:latest . || exit 1
                 '''
             }
         }
