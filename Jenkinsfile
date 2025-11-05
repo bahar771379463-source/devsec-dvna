@@ -52,10 +52,10 @@ pipeline {
                 echo "🚀 Deploying container..."
                 sh '''
                # حذف كل الحاويات اللي تحمل الاسم بالضبط (وليس أي جزئية منه)
-if [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
-    echo "🧹 Removing old container ${CONTAINER_NAME}..."
-    docker rm -f ${CONTAINER_NAME}
-fi
+                if [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
+                echo "🧹 Removing old container ${CONTAINER_NAME}..."
+                    docker rm -f ${CONTAINER_NAME}
+                    fi
                 # تشغيل الحاوية
                 docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
                 '''
