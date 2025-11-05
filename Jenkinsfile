@@ -8,6 +8,8 @@ pipeline {
         GIT_CREDENTIALS = "github-credentials"
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CREDENTIALS = "vault-root-tokin"
+        SSH_CREDENTIALS = "ssh-test-server"
+        TEST_SERVER_IP = "192.168.1.3" // غيّرها إلى IP السيرفر التجريبي الحقيقي
     }
 
     stages {
@@ -22,27 +24,21 @@ pipeline {
         stage('Fetch DockerHub Credentials from Vault') {
             steps {
                 echo "🔐 Fetching Docker Hub credentials from Vault..."
-                withVault([vaultSecrets: [
-                    [path: 'secret/docker-credentials',
-                     secretValues: [
-                         [envVar: 'DOCKERHUB_USER', vaultKey: 'username'],
-                         [envVar: 'DOCKERHUB_PASS', vaultKey: 'password']
-                     ]]
-                ]]) {
+                withVault([vaultSecrets: [[path: 'secret/docker-credentials',
+                    secretValues: [
+                        [envVar: 'DOCKERHUB_USER', vaultKey: 'username'],
+                        [envVar: 'DOCKERHUB_PASS', vaultKey: 'password']
+                    ]
+                ]]]) {
                     echo "✅ Credentials loaded from Vault."
-
-                    // اختبار الاتصال بالإنترنت
                     sh '''
                     echo "🌐 Testing connection to Docker Hub..."
                     curl -I --max-time 10 https://registry-1.docker.io/v2/ || true
-                    '''
 
-                    // تسجيل الدخول مع 3 محاولات
-                    sh '''
                     echo "🔑 Attempting Docker login..."
                     for i in {1..3}; do
                         echo "${DOCKERHUB_PASS}" | docker login -u "${DOCKERHUB_USER}" --password-stdin && break
-                        echo "⚠️ Login failed... retrying in 10 seconds..."
+                        echo "⚠ Login failed... retrying in 10 seconds..."
                         sleep 10
                     done
                     '''
@@ -71,7 +67,6 @@ pipeline {
                 script {
                     echo "⚙ Checking if image exists in Docker Hub..."
                     def imageExists = sh(script: "docker pull ${IMAGE_NAME} || true", returnStatus: true)
-
                     if (env.CODE_CHANGED == "true" || imageExists != 0) {
                         echo "🔨 Building new Docker image..."
                         sh "docker build -t ${IMAGE_NAME} ."
@@ -91,25 +86,34 @@ pipeline {
             }
         }
 
-        stage('Run Docker Container') {
+        stage('Deploy to Test Server') {
             steps {
-                echo "🚀 Deploying container..."
-                sh '''
-                # حذف أي حاوية سابقة بنفس الاسم
-                if [ "$(docker ps -aq -f name=${CONTAINER_NAME})" ]; then
-                    docker rm -f ${CONTAINER_NAME}
-                fi
+                echo "🚀 Deploying to Test Server..."
+                sshagent (credentials: ["${SSH_CREDENTIALS}"]) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ubuntu@${TEST_SERVER_IP} '
+                        echo "🧹 Removing old container if exists..."
+                        if [ \$(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
+                            docker rm -f ${CONTAINER_NAME}
+                        fi
 
-                # تشغيل الحاوية الجديدة
-                docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
-                '''
+                        echo "📦 Pulling latest image from Docker Hub..."
+                        docker pull ${IMAGE_NAME}
+
+                        echo "🚀 Running container..."
+                        docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
+
+                        echo "✅ Deployment successful on Test Server!"
+                    '
+                    """
+                }
             }
         }
     }
 
     post {
         success {
-            echo "✅ Pipeline completed successfully!"
+            echo "✅ Pipeline completed successfully! (Deployed to Test Server)"
         }
         failure {
             echo "❌ Pipeline failed. Check logs for details."
