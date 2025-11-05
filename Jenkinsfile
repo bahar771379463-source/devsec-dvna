@@ -42,7 +42,7 @@ pipeline {
             '''
         }
     }
-}
+    }
 
 
         stage('Check for Code Changes') {
@@ -64,7 +64,7 @@ pipeline {
             }
         }
 
-        stage('Compare Docker Image Digests') {
+              stage('Compare Docker Image Digests') {
             steps {
                 script {
                     echo "🔎 Comparing local and remote image digests..."
