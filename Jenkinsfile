@@ -18,15 +18,24 @@ pipeline {
 
         stage('Fetch DockerHub Credentials from Vault') {
             steps {
-                echo "🔐 Fetching Docker Hub credentials from Vault..."
-                withVault(configuration: [vaultSecrets: [
-                    [path: 'secret/docker-credentials', secretValues: [
+               withVault([
+                 vaultSecrets: [
+             [
+                      path: 'secret/docker-credentials',
+                         secretValues: [
                         [envVar: 'DOCKERHUB_USER', vaultKey: 'username'],
                         [envVar: 'DOCKERHUB_PASS', vaultKey: 'password']
-                    ]]
-                ]]) {
-                    echo "✅ Credentials loaded from Vault."
+             ]
+             ]
+                ],
+                 configuration: [
+                         vaultUrl: 'http://192.168.1.2:8200',      // غيّر هذا إلى عنوان الـ Vault الحقيقي
+                            vaultCredentialId: 'vault-root-tokin'       // الـ AppRole ID أو Credential ID داخل Jenkins
+            ]
+                ])      {
+                        echo "✅ Credentials loaded from Vault."
                 }
+
             }
         }
 
