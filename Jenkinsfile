@@ -2,12 +2,10 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "dvna:latest"
-        NAME = "dvna"
+        IMAGE_NAME = "bahar771379463/bahar771379:latest"
+        CONTAINER_NAME = "dvna"
         GIT_REPO = "https://github.com/bahar771379463-source/devsec-dvna.git"
         GIT_CREDENTIALS = "github-credentials"
-        VAULT_ADDR = "http://192.168.1.2:8200"    
-        VAULT_CRED = "vault-root-tokin"             
     }
 
     stages {
@@ -18,48 +16,48 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Fetch DockerHub Credentials from Vault') {
             steps {
-                echo "🔨 Building Docker image..."
-                sh '''
-                docker pull bahar771379463/bahar771379:latest || true
-
-                docker build --cache-from=bahar771379463/bahar771379:latest -t dvna:latest . || exit 1
-                '''
+                echo "🔐 Fetching Docker Hub credentials from Vault..."
+                withVault(configuration: [vaultUrl: 'http://192.168.1.2:8200',
+                                          vaultCredentialId: 'vault-root-tokin'], 
+                          vaultSecrets: [[path: 'secret/docker-credentials', secretValues: [
+                              [envVar: 'DOCKERHUB_USER', vaultKey: 'username'],
+                              [envVar: 'DOCKERHUB_PASS', vaultKey: 'password']
+                          ]]]
+                ) {
+                    echo "✅ Credentials loaded from Vault."
+                }
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Build or Pull Docker Image') {
             steps {
-                echo "🔐 Fetching Docker Hub credentials from Vault..."
-                withVault(configuration: [vaultUrl: "${VAULT_ADDR}",
-                                          vaultCredentialId: "${VAULT_CRED}",
-                                          engineVersion: 2],
-                          vaultSecrets: [[path: 'secret/docker-credentials',
-                                          secretValues: [
-                                              [envVar: 'DOCKER_USER', vaultKey: 'username'],
-                                              [envVar: 'DOCKER_PASS', vaultKey: 'password']
-                                          ]]
-                         ]) {
-                    sh '''
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    docker tag ${IMAGE_NAME} bahar771379463/bahar771379:latest
-                    docker push bahar771379463/bahar771379:latest
-                    docker logout
-                    '''
-                }
+                echo "⚙ Checking if image exists in Docker Hub..."
+                sh '''
+                if docker pull ${IMAGE_NAME}; then
+                  echo "🟢 Using existing image from Docker Hub."
+                else
+                  echo "🔨 Building new Docker image..."
+                  docker build -t ${IMAGE_NAME} .
+                  echo "${DOCKERHUB_PASS}" | docker login -u "${DOCKERHUB_USER}" --password-stdin
+                  docker push ${IMAGE_NAME}
+                fi
+                '''
             }
         }
 
         stage('Run Docker Container') {
             steps {
-                echo "▶ Running Docker container..."
+                echo "🚀 Deploying container..."
                 sh '''
-                if [ $(docker ps -aq -f name=${NAME}) ]; then
-                    docker rm -f ${NAME}
+                # إذا كانت الحاوية موجودة، نحذفها أولاً
+                if [ $(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
+                    docker rm -f ${CONTAINER_NAME}
                 fi
 
-                docker run -d --name ${NAME} -p 9090:9090 bahar771379463/bahar771379:latest
+                # تشغيل الحاوية
+                docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
                 '''
             }
         }
