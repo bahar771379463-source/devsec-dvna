@@ -8,6 +8,7 @@ pipeline {
         GIT_CREDENTIALS = "github-credentials"
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CREDENTIALS = "vault-root-tokin"
+        TRIVY_CACHE_DIR = "/var/lib/trivy"  // 🔐 لتسريع الفحص وتجنب التحميل كل مرة
     }
 
     stages {
@@ -26,9 +27,10 @@ pipeline {
                     secretValues: [
                         [envVar: 'DOCKERHUB_USER', vaultKey: 'username'],
                         [envVar: 'DOCKERHUB_PASS', vaultKey: 'password']
-                    ]
+                    ]]
                 ]]]) {
                     echo "✅ Credentials loaded from Vault."
+
                     sh '''
                     echo "🌐 Testing connection to Docker Hub..."
                     curl -I --max-time 10 https://registry-1.docker.io/v2/ || true
@@ -44,47 +46,24 @@ pipeline {
             }
         }
 
-        stage('Check for Code Changes') {
+        stage('Build Docker Image') {
             steps {
-                script {
-                    echo "🔍 Checking for code or Dockerfile changes..."
-                    def changes = sh(script: 'git diff --name-only HEAD~1 HEAD | grep -E "(Dockerfile|package.json|src|server.js)" || true', returnStdout: true).trim()
-                    if (changes) {
-                        echo "🟠 Code changes detected:\n${changes}"
-                        env.CODE_CHANGED = "true"
-                    } else {
-                        echo "🟢 No code changes detected."
-                        env.CODE_CHANGED = "false"
-                    }
-                }
+                echo "🔨 Building Docker image..."
+                sh "docker build -t ${IMAGE_NAME} ."
             }
         }
 
-        stage('Build or Use Existing Image') {
-            steps {
-                script {
-                    echo "⚙ Checking if image exists in Docker Hub..."
-                    def imageExists = sh(script: "docker pull ${IMAGE_NAME} || true", returnStatus: true)
-                    if (env.CODE_CHANGED == "true" || imageExists != 0) {
-                        echo "🔨 Building new Docker image..."
-                        sh "docker build -t ${IMAGE_NAME} ."
-                    } else {
-                        echo "✅ Using existing image from Docker Hub."
-                    }
-                }
-            }
-        }
-
-        // 🌟 المرحلة الأمنية الجديدة
         stage('Security Scan with Trivy') {
             steps {
-                echo "🔍 Scanning Docker image for vulnerabilities (Trivy)..."
+                echo "🧪 Running Trivy Security Scan..."
                 sh '''
-                trivy image --severity HIGH,CRITICAL --no-progress --exit-code 1 ${IMAGE_NAME} || {
-                    echo "❌ Critical vulnerabilities found in Docker image."
+                mkdir -p ${TRIVY_CACHE_DIR}
+                echo "🔍 Scanning Docker image for vulnerabilities..."
+                trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-update --severity HIGH,CRITICAL --exit-code 1 ${IMAGE_NAME} || {
+                    echo "🚨 Vulnerabilities found! Stopping pipeline."
                     exit 1
                 }
-                echo "✅ No critical vulnerabilities found in image."
+                echo "✅ No critical vulnerabilities found!"
                 '''
             }
         }
@@ -99,22 +78,22 @@ pipeline {
         stage('Deploy to Test Server') {
             steps {
                 echo "🚀 Deploying to Test Server..."
-                sshagent(['ssh-test-server']) {
+                sshagent(credentials: ['ssh-test-server']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 '
-                        echo "🧹 Removing old container if exists..."
-                        if [ $(docker ps -aq -f name=dvna) ]; then
+                    ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 "
+                        echo '🧹 Removing old container if exists...'
+                        if [ \$(docker ps -aq -f name=dvna) ]; then
                             docker rm -f dvna
                         fi
 
-                        echo "📦 Pulling latest image from Docker Hub..."
+                        echo '📦 Pulling latest image...'
                         docker pull ${IMAGE_NAME}
 
-                        echo "🚀 Running container..."
+                        echo '🚀 Running container...'
                         docker run -d --name dvna -p 9090:9090 ${IMAGE_NAME}
 
-                        echo "✅ Deployment successful on Test Server!"
-                    '
+                        echo '✅ Deployment successful on Test Server!'
+                    "
                     '''
                 }
             }
@@ -124,11 +103,11 @@ pipeline {
             steps {
                 echo "🩺 Performing Smoke Test on deployed app..."
                 script {
-                    def status = sh(script: "curl -o /dev/null -s -w %{http_code} http://192.168.1.3:9090", returnStdout: true).trim()
-                    if (status == "200") {
-                        echo "✅ Application is healthy and responding correctly!"
+                    def response = sh(script: "curl -o /dev/null -s -w %{http_code} http://192.168.1.3:9090", returnStdout: true).trim()
+                    if (response != '200') {
+                        error("❌ Smoke Test failed! Application did not return HTTP 200.")
                     } else {
-                        error("❌ Application failed health check. Status code: ${status}")
+                        echo "✅ Smoke Test passed successfully."
                     }
                 }
             }
@@ -137,10 +116,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
+            echo "✅ Pipeline completed successfully with Security Scan!"
         }
         failure {
-            echo "❌ Pipeline failed during security scan or deployment. Check logs for details."
+            echo "❌ Pipeline failed during security or deployment stages."
         }
     }
 }
