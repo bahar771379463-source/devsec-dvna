@@ -8,8 +8,6 @@ pipeline {
         GIT_CREDENTIALS = "github-credentials"
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CREDENTIALS = "vault-root-tokin"
-        TEST_SERVER_IP = "192.168.1.3"
-        TEST_APP_URL = "http://192.168.1.3:9090"
     }
 
     stages {
@@ -24,15 +22,13 @@ pipeline {
         stage('Fetch DockerHub Credentials from Vault') {
             steps {
                 echo "🔐 Fetching Docker Hub credentials from Vault..."
-                withVault([vaultSecrets: [[
-                    path: 'secret/docker-credentials',
+                withVault([vaultSecrets: [[path: 'secret/docker-credentials',
                     secretValues: [
                         [envVar: 'DOCKERHUB_USER', vaultKey: 'username'],
                         [envVar: 'DOCKERHUB_PASS', vaultKey: 'password']
                     ]
                 ]]]) {
                     echo "✅ Credentials loaded from Vault."
-
                     sh '''
                     echo "🌐 Testing connection to Docker Hub..."
                     curl -I --max-time 10 https://registry-1.docker.io/v2/ || true
@@ -69,7 +65,6 @@ pipeline {
                 script {
                     echo "⚙ Checking if image exists in Docker Hub..."
                     def imageExists = sh(script: "docker pull ${IMAGE_NAME} || true", returnStatus: true)
-
                     if (env.CODE_CHANGED == "true" || imageExists != 0) {
                         echo "🔨 Building new Docker image..."
                         sh "docker build -t ${IMAGE_NAME} ."
@@ -77,6 +72,20 @@ pipeline {
                         echo "✅ Using existing image from Docker Hub."
                     }
                 }
+            }
+        }
+
+        // 🌟 المرحلة الأمنية الجديدة
+        stage('Security Scan with Trivy') {
+            steps {
+                echo "🔍 Scanning Docker image for vulnerabilities (Trivy)..."
+                sh '''
+                trivy image --severity HIGH,CRITICAL --no-progress --exit-code 1 ${IMAGE_NAME} || {
+                    echo "❌ Critical vulnerabilities found in Docker image."
+                    exit 1
+                }
+                echo "✅ No critical vulnerabilities found in image."
+                '''
             }
         }
 
@@ -92,47 +101,46 @@ pipeline {
                 echo "🚀 Deploying to Test Server..."
                 sshagent(['ssh-test-server']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no bahar@${TEST_SERVER_IP} "
-                        echo '🧹 Removing old container if exists...'
-                        if [ \\$(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
-                            docker rm -f ${CONTAINER_NAME}
+                    ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 '
+                        echo "🧹 Removing old container if exists..."
+                        if [ $(docker ps -aq -f name=dvna) ]; then
+                            docker rm -f dvna
                         fi
 
-                        echo '📦 Pulling latest image from Docker Hub...'
+                        echo "📦 Pulling latest image from Docker Hub..."
                         docker pull ${IMAGE_NAME}
 
-                        echo '🚀 Running container...'
-                        docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
+                        echo "🚀 Running container..."
+                        docker run -d --name dvna -p 9090:9090 ${IMAGE_NAME}
 
-                        echo '✅ Deployment successful on Test Server!'
-                    "
+                        echo "✅ Deployment successful on Test Server!"
+                    '
                     '''
                 }
             }
         }
 
         stage('Smoke Test (Health Check)') {
-    steps {
-        echo "🩺 Performing Smoke Test on deployed app..."
-        script {
-            // تنفيذ الفحص من السيرفر التجريبي
-            sshagent(credentials: ['ssh-test-server']) {
-                sh '''
-                echo "🌐 Running health check from Test Server..."
-                curl -o /dev/null -s -w "%{http_code}" http://192.168.1.3:9090 || echo "success"
-                '''
+            steps {
+                echo "🩺 Performing Smoke Test on deployed app..."
+                script {
+                    def status = sh(script: "curl -o /dev/null -s -w %{http_code} http://192.168.1.3:9090", returnStdout: true).trim()
+                    if (status == "200") {
+                        echo "✅ Application is healthy and responding correctly!"
+                    } else {
+                        error("❌ Application failed health check. Status code: ${status}")
+                    }
+                }
             }
         }
-    }
-    }
     }
 
     post {
         success {
-            echo "✅ Pipeline completed successfully! (Deployed + Tested on Test Server)"
+            echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
         }
         failure {
-            echo "❌ Pipeline failed during deployment or testing. Check logs for details."
+            echo "❌ Pipeline failed during security scan or deployment. Check logs for details."
         }
     }
 }
