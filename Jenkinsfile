@@ -119,7 +119,7 @@ pipeline {
             sshagent(credentials: ['ssh-test-server']) {
                 sh '''
                 echo "🌐 Running health check from Test Server..."
-                curl -o /dev/null -s -w "%{http_code}" http://localhost:9090 || echo "Failed"
+                curl -o /dev/null -s -w "%{http_code}" http://192.168.1.3:9090 || echo "Failed"
                 '''
             }
         }
