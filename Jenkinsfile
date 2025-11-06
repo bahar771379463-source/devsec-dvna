@@ -28,7 +28,7 @@ pipeline {
                         [envVar: 'DOCKERHUB_USER', vaultKey: 'username'],
                         [envVar: 'DOCKERHUB_PASS', vaultKey: 'password']
                     ]]
-                ]]]) {
+                 ]]) {
                     echo "✅ Credentials loaded from Vault."
 
                     sh '''
