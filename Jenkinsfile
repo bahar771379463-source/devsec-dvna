@@ -91,7 +91,7 @@ pipeline {
                 echo "🚀 Deploying to Test Server..."
                 sshagent (credentials: ["${SSH_CREDENTIALS}"]) {
                     sh """
-                    ssh -o StrictHostKeyChecking=no ubuntu@${TEST_SERVER_IP} '
+                    ssh -o StrictHostKeyChecking=no bahar@${TEST_SERVER_IP} '
                         echo "🧹 Removing old container if exists..."
                         if [ \$(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
                             docker rm -f ${CONTAINER_NAME}
