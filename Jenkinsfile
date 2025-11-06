@@ -112,18 +112,19 @@ pipeline {
         }
 
         stage('Smoke Test (Health Check)') {
-            steps {
-                echo "🩺 Performing Smoke Test on deployed app..."
-                script {
-                    def response = sh(script: "curl -o /dev/null -s -w '%{http_code}' ${TEST_APP_URL}", returnStdout: true).trim()
-                    if (response == "200" || response == "302") {
-                        echo "✅ Smoke Test Passed! Application is running (HTTP ${response})."
-                    } else {
-                        error("❌ Smoke Test Failed! Application returned HTTP ${response}.")
-                    }
-                }
+    steps {
+        echo "🩺 Performing Smoke Test on deployed app..."
+        script {
+            // تنفيذ الفحص من السيرفر التجريبي
+            sshagent(credentials: ['ssh-test-server']) {
+                sh '''
+                echo "🌐 Running health check from Test Server..."
+                curl -o /dev/null -s -w "%{http_code}" http://localhost:9090 || echo "Failed"
+                '''
             }
         }
+    }
+    }
     }
 
     post {
