@@ -9,14 +9,15 @@ pipeline {
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CRED = "vault-credentials"
 
-        // 🟢 تليجرام
+        // 🟢 بيانات بوت تليجرام
         TELEGRAM_TOKEN = "8531739383:AAEZMh8yZL9mODLOau1pufHoMYHKSsDNDtQ"
         TELEGRAM_CHAT_ID = "1469322337"
 
-        // 🟢 Twilio واتساب
-        TWILIO_ACCOUNT_SID = "ACccb4c0aa470c28f1e10b24c618a73b40"
-        TWILIO_AUTH_TOKEN = "77ac6db6d8be1098f5f6eb1c1ee37d3b"
-        TWILIO_TO = "+967734256428" // رقم واتساب المستلم
+        // 🟢 بيانات Twilio (واتساب)
+        TWILIO_SID = "ACccb4c0aa470c28f1e10b24c618a73b40"
+        TWILIO_TOKEN = "77ac6db6d8be1098f5f6eb1c1ee37d3b"
+        TWILIO_FROM = "whatsapp:+14155238886"
+        TWILIO_TO = "whatsapp:+967734256428"
     }
 
     stages {
@@ -94,7 +95,7 @@ pipeline {
                     sh '''
                         ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 "
                         echo '🧹 Removing old container if exists...'
-                        if [ $(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
+                        if [ \$(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
                             docker rm -f ${CONTAINER_NAME}
                         fi
                         echo '📦 Pulling latest image from Docker Hub...'
@@ -126,30 +127,24 @@ pipeline {
     post {
         success {
             echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
-            
-            // 📨 البريد الإلكتروني
+            def report_url = "${env.BUILD_URL}artifact/trivy-report.html"
+
+            // ✉ إشعار عبر الإيميل
             emailext(
                 to: "bahar771379463@gmail.com",
-                subject: "✅ Trivy Security Report - Build ${env.BUILD_NUMBER}",
-                body: "Attached is the Trivy security scan report for build ${env.BUILD_NUMBER}.",
-                attachmentsPattern: "trivy-report.html"
+                subject: "✅ Build Success - Trivy Report Build #${env.BUILD_NUMBER}",
+                body: """
+✅ The pipeline completed successfully!  
+🔗 <a href="${report_url}">View Trivy Report in Jenkins</a>  
+🧩 Project: ${env.JOB_NAME}  
+Build Number: ${env.BUILD_NUMBER}
+""",
+                attachmentsPattern: "trivy-report.html",
+                mimeType: 'text/html'
             )
 
-            // 📞 WhatsApp عبر Twilio
+            // 💬 إشعار تليجرام
             script {
-                def message = "✅ Pipeline Success! Build #${env.BUILD_NUMBER} finished successfully. Project: ${env.JOB_NAME}."
-                sh """
-                    curl -X POST https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json \
-                    --data-urlencode "From=whatsapp:+14155238886" \
-                    --data-urlencode "To=whatsapp:${TWILIO_TO}" \
-                    --data-urlencode "Body=${message}" \
-                    -u ${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}
-                """
-            }
-
-            // 🤖 تليجرام
-            script {
-                def report_url = "${env.BUILD_URL}artifact/trivy-report.html"
                 def message = """
 🚀 Pipeline Success!
 ✅ Build #${env.BUILD_NUMBER} finished successfully.
@@ -163,32 +158,37 @@ pipeline {
                     -d text="${message}"
                 """
             }
+
+            // 💚 إشعار واتساب
+            script {
+                def body = "✅ Jenkins Build #${env.BUILD_NUMBER} succeeded! View report: ${report_url}"
+                sh """
+                    curl -X POST https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json \
+                    --data-urlencode "From=${TWILIO_FROM}" \
+                    --data-urlencode "To=${TWILIO_TO}" \
+                    --data-urlencode "Body=${body}" \
+                    -u ${TWILIO_SID}:${TWILIO_TOKEN}
+                """
+            }
         }
 
         failure {
             echo "❌ Pipeline failed. Check logs for details."
+            def logs_url = "${env.BUILD_URL}"
 
-            // 📨 البريد الإلكتروني
+            // ❌ إشعار البريد عند الفشل
             emailext(
                 to: "bahar771379463@gmail.com",
-                subject: "❌ Build Failed - Trivy Security Report",
-                body: "The build ${env.BUILD_NUMBER} failed. Check Jenkins console for details.",
-                attachmentsPattern: "trivy-report.html"
+                subject: "❌ Build Failed - ${env.JOB_NAME}",
+                body: """
+🚨 Build #${env.BUILD_NUMBER} failed!  
+🔗 <a href="${logs_url}">View Logs in Jenkins</a>
+""",
+                attachmentsPattern: "trivy-report.html",
+                mimeType: 'text/html'
             )
 
-            // 📞 WhatsApp عبر Twilio عند الفشل
-            script {
-                def message = "🚨 Pipeline Failed! Build #${env.BUILD_NUMBER} has failed. Project: ${env.JOB_NAME}."
-                sh """
-                    curl -X POST https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json \
-                    --data-urlencode "From=whatsapp:+14155238886" \
-                    --data-urlencode "To=whatsapp:${TWILIO_TO}" \
-                    --data-urlencode "Body=${message}" \
-                    -u ${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}
-                """
-            }
-
-            // 🤖 تليجرام عند الفشل
+            // 💬 إشعار تليجرام عند الفشل
             script {
                 def message = """
 🚨 Pipeline Failed!
@@ -201,6 +201,18 @@ pipeline {
                     -d chat_id=${TELEGRAM_CHAT_ID} \
                     -d parse_mode=Markdown \
                     -d text="${message}"
+                """
+            }
+
+            // 🔴 إشعار واتساب عند الفشل
+            script {
+                def body = "❌ Jenkins Build #${env.BUILD_NUMBER} failed! Check logs: ${logs_url}"
+                sh """
+                    curl -X POST https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json \
+                    --data-urlencode "From=${TWILIO_FROM}" \
+                    --data-urlencode "To=${TWILIO_TO}" \
+                    --data-urlencode "Body=${body}" \
+                    -u ${TWILIO_SID}:${TWILIO_TOKEN}
                 """
             }
         }
