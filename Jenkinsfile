@@ -187,7 +187,7 @@ pipeline {
                 attachLog: false,
                 attachmentsPattern: "trivy-report.html",
                 mimeType: 'text/html',
-                to: "youremail@gmail.com"
+                to: "bahar771379463@gmail.com"
             )
         }
 
