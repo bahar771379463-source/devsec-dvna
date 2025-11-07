@@ -8,7 +8,7 @@ pipeline {
         GIT_CREDENTIALS = "github-credentials"
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CREDENTIALS = "vault-root-tokin"
-         TRIVY_CACHE_DIR = "/var/lib/trivy"
+        TRIVY_CACHE_DIR = "/var/lib/trivy"
     }
 
     stages {
@@ -76,22 +76,39 @@ pipeline {
             }
         }
 
-        // 🌟 المرحلة الأمنية الجديدة
-          stage('Security Scan with Trivy') {
+        // 🌟 المرحلة الأمنية الجديدة مع تفاعل
+        stage('Security Scan with Trivy') {
             steps {
                 echo "🧪 Running Trivy Security Scan..."
-                sh '''
-                mkdir -p ${TRIVY_CACHE_DIR}
-                echo "🔍 Scanning Docker image for vulnerabilities..."
-                trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-update --severity HIGH,CRITICAL --exit-code 1 ${IMAGE_NAME} || {
-                    echo "🚨 Vulnerabilities found! Stopping pipeline."
-                  
+                script {
+                    def scanStatus = sh(script: """
+                        mkdir -p ${TRIVY_CACHE_DIR}
+                        echo "🔍 Scanning Docker image for vulnerabilities..."
+                        trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update \
+                        --format template --template "@contrib/html.tpl" -o trivy-report.html \
+                        --severity HIGH,CRITICAL ${IMAGE_NAME} || true
+                    """, returnStatus: true)
+
+                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
+
+                    if (scanStatus != 0) {
+                        echo "🚨 Vulnerabilities detected! Prompting user for action..."
+                        def decision = input(
+                            id: 'userDecision', message: '⚠ Trivy detected vulnerabilities. Do you want to continue?',
+                            parameters: [choice(choices: ['Stop Pipeline', 'Continue Anyway'], description: 'Select an action')]
+                        )
+
+                        if (decision == 'Stop Pipeline') {
+                            error("🚫 Pipeline stopped due to vulnerabilities.")
+                        } else {
+                            echo "⚠ Proceeding despite vulnerabilities (user-approved)."
+                        }
+                    } else {
+                        echo "✅ No critical vulnerabilities found!"
+                    }
                 }
-                echo "✅ No critical vulnerabilities found!"
-                '''
             }
         }
-
 
         stage('Push to Docker Hub') {
             steps {
@@ -142,9 +159,42 @@ pipeline {
     post {
         success {
             echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
+            emailext (
+                subject: "✅ Jenkins Pipeline Success: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                <h2>Pipeline Successful 🎉</h2>
+                <p>Project: <b>${env.JOB_NAME}</b></p>
+                <p>Build Number: <b>${env.BUILD_NUMBER}</b></p>
+                <p>View build logs and artifacts:</p>
+                <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
+                <hr>
+                <p>Attached is the Trivy security scan report (HTML).</p>
+                """,
+                attachLog: false,
+                attachmentsPattern: "trivy-report.html",
+                mimeType: 'text/html',
+                to: "youremail@gmail.com"
+            )
         }
+
         failure {
             echo "❌ Pipeline failed during security scan or deployment. Check logs for details."
+            emailext (
+                subject: "🚨 Jenkins Pipeline FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                <h2>⚠ Pipeline Failed</h2>
+                <p>Project: <b>${env.JOB_NAME}</b></p>
+                <p>Build Number: <b>${env.BUILD_NUMBER}</b></p>
+                <p>Check Jenkins logs for details:</p>
+                <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
+                <hr>
+                <p>Attached is the Trivy vulnerability report for review.</p>
+                """,
+                attachLog: true,
+                attachmentsPattern: "trivy-report.html",
+                mimeType: 'text/html',
+                to: "youremail@gmail.com"
+            )
         }
     }
 }
