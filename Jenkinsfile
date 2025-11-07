@@ -76,20 +76,23 @@ pipeline {
             }
         }
 
-        // 🌟 المرحلة الأمنية الجديدة مع تفاعل
         stage('Security Scan with Trivy') {
             steps {
                 echo "🧪 Running Trivy Security Scan..."
                 script {
+                    def templatePath = 'contrib/html.tpl'
+                    def useTemplate = fileExists(templatePath)
+                    def scanCmd = useTemplate ? 
+                        "trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update --format template --template @${templatePath} -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME}" :
+                        "trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update --format json -o trivy-report.json --severity HIGH,CRITICAL ${IMAGE_NAME}"
+
                     def scanStatus = sh(script: """
                         mkdir -p ${TRIVY_CACHE_DIR}
                         echo "🔍 Scanning Docker image for vulnerabilities..."
-                        trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update \
-                        --format template --template "@contrib/html.tpl" -o trivy-report.html \
-                        --severity HIGH,CRITICAL ${IMAGE_NAME} || true
+                        ${scanCmd} || true
                     """, returnStatus: true)
 
-                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
+                    archiveArtifacts artifacts: useTemplate ? 'trivy-report.html' : 'trivy-report.json', fingerprint: true
 
                     if (scanStatus != 0) {
                         echo "🚨 Vulnerabilities detected! Prompting user for action..."
@@ -97,7 +100,6 @@ pipeline {
                             id: 'userDecision', message: '⚠ Trivy detected vulnerabilities. Do you want to continue?',
                             parameters: [choice(choices: ['Stop Pipeline', 'Continue Anyway'], description: 'Select an action')]
                         )
-
                         if (decision == 'Stop Pipeline') {
                             error("🚫 Pipeline stopped due to vulnerabilities.")
                         } else {
@@ -121,22 +123,25 @@ pipeline {
             steps {
                 echo "🚀 Deploying to Test Server..."
                 sshagent(['ssh-test-server']) {
-                    sh '''
+                    sh """
                     ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 '
+                        IMAGE_NAME=${IMAGE_NAME}
+                        CONTAINER_NAME=${CONTAINER_NAME}
+
                         echo "🧹 Removing old container if exists..."
-                        if [ $(docker ps -aq -f name=dvna) ]; then
-                            docker rm -f dvna
+                        if [ \$(docker ps -aq -f name=\$CONTAINER_NAME) ]; then
+                            docker rm -f \$CONTAINER_NAME
                         fi
 
                         echo "📦 Pulling latest image from Docker Hub..."
-                        docker pull ${IMAGE_NAME}
+                        docker pull \$IMAGE_NAME
 
                         echo "🚀 Running container..."
-                        docker run -d --name dvna -p 9090:9090 ${IMAGE_NAME}
+                        docker run -d --name \$CONTAINER_NAME -p 9090:9090 \$IMAGE_NAME
 
                         echo "✅ Deployment successful on Test Server!"
                     '
-                    '''
+                    """
                 }
             }
         }
@@ -168,10 +173,10 @@ pipeline {
                 <p>View build logs and artifacts:</p>
                 <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
                 <hr>
-                <p>Attached is the Trivy security scan report (HTML).</p>
+                <p>Attached is the Trivy security scan report.</p>
                 """,
                 attachLog: false,
-                attachmentsPattern: "trivy-report.html",
+                attachmentsPattern: useTemplate ? "trivy-report.html" : "trivy-report.json",
                 mimeType: 'text/html',
                 to: "youremail@gmail.com"
             )
@@ -191,9 +196,9 @@ pipeline {
                 <p>Attached is the Trivy vulnerability report for review.</p>
                 """,
                 attachLog: true,
-                attachmentsPattern: "trivy-report.html",
+                attachmentsPattern: useTemplate ? "trivy-report.html" : "trivy-report.json",
                 mimeType: 'text/html',
-                to: "youremail@gmail.com"
+                to: "bahar771379463@gmail.com"
             )
         }
     }
