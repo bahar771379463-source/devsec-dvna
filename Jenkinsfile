@@ -9,9 +9,14 @@ pipeline {
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CRED = "vault-credentials"
 
-        // 🟢 أضف معلومات بوت تليجرام هنا
+        // 🟢 تليجرام
         TELEGRAM_TOKEN = "8531739383:AAEZMh8yZL9mODLOau1pufHoMYHKSsDNDtQ"
         TELEGRAM_CHAT_ID = "1469322337"
+
+        // 🟢 Twilio واتساب
+        TWILIO_ACCOUNT_SID = "ACccb4c0aa470c28f1e10b24c618a73b40"
+        TWILIO_AUTH_TOKEN = "77ac6db6d8be1098f5f6eb1c1ee37d3b"
+        TWILIO_TO = "+967734256428" // رقم واتساب المستلم
     }
 
     stages {
@@ -122,7 +127,7 @@ pipeline {
         success {
             echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
             
-            // إرسال التقرير إلى البريد الإلكتروني
+            // 📨 البريد الإلكتروني
             emailext(
                 to: "bahar771379463@gmail.com",
                 subject: "✅ Trivy Security Report - Build ${env.BUILD_NUMBER}",
@@ -130,7 +135,19 @@ pipeline {
                 attachmentsPattern: "trivy-report.html"
             )
 
-            // إرسال إشعار إلى تليجرام مع رابط التقرير
+            // 📞 WhatsApp عبر Twilio
+            script {
+                def message = "✅ Pipeline Success! Build #${env.BUILD_NUMBER} finished successfully. Project: ${env.JOB_NAME}."
+                sh """
+                    curl -X POST https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json \
+                    --data-urlencode "From=whatsapp:+14155238886" \
+                    --data-urlencode "To=whatsapp:${TWILIO_TO}" \
+                    --data-urlencode "Body=${message}" \
+                    -u ${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}
+                """
+            }
+
+            // 🤖 تليجرام
             script {
                 def report_url = "${env.BUILD_URL}artifact/trivy-report.html"
                 def message = """
@@ -151,7 +168,7 @@ pipeline {
         failure {
             echo "❌ Pipeline failed. Check logs for details."
 
-            // إشعار البريد
+            // 📨 البريد الإلكتروني
             emailext(
                 to: "bahar771379463@gmail.com",
                 subject: "❌ Build Failed - Trivy Security Report",
@@ -159,7 +176,19 @@ pipeline {
                 attachmentsPattern: "trivy-report.html"
             )
 
-            // إشعار تليجرام عند الفشل
+            // 📞 WhatsApp عبر Twilio عند الفشل
+            script {
+                def message = "🚨 Pipeline Failed! Build #${env.BUILD_NUMBER} has failed. Project: ${env.JOB_NAME}."
+                sh """
+                    curl -X POST https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json \
+                    --data-urlencode "From=whatsapp:+14155238886" \
+                    --data-urlencode "To=whatsapp:${TWILIO_TO}" \
+                    --data-urlencode "Body=${message}" \
+                    -u ${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}
+                """
+            }
+
+            // 🤖 تليجرام عند الفشل
             script {
                 def message = """
 🚨 Pipeline Failed!
