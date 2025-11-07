@@ -118,7 +118,7 @@ pipeline {
         success {
             echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
             emailext(
-                to: "youremail@gmail.com",
+                to: "bahar771379463@gmail.com.com",
                 subject: "✅ Trivy Security Report - Build ${env.BUILD_NUMBER}",
                 body: "Attached is the Trivy security scan report for build ${env.BUILD_NUMBER}.",
                 attachmentsPattern: "trivy-report.html"
