@@ -9,27 +9,18 @@ pipeline {
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CREDENTIALS = "vault-root-tokin"
         TRIVY_CACHE_DIR = "/var/lib/trivy"
-        TRIVY_TEMPLATE_DIR = "contrib"
-        TRIVY_TEMPLATE_FILE = "html.tpl"
     }
 
     stages {
 
         stage('Initialize Trivy Template') {
             steps {
-                script {
-                    sh "mkdir -p ${TRIVY_TEMPLATE_DIR}"
-                    if (!fileExists("${TRIVY_TEMPLATE_DIR}/${TRIVY_TEMPLATE_FILE}")) {
-                        echo "📥 Downloading Trivy HTML template..."
-                        sh """
-                        curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
-                        -o ${TRIVY_TEMPLATE_DIR}/${TRIVY_TEMPLATE_FILE}
-                        """
-                        echo "✅ Template downloaded successfully."
-                    } else {
-                        echo "✅ Trivy HTML template already exists. Skipping download."
-                    }
-                }
+                echo "📥 Downloading Trivy HTML template..."
+                sh '''
+                    mkdir -p contrib
+                    curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o contrib/html.tpl
+                '''
+                echo "✅ Template downloaded successfully."
             }
         }
 
@@ -100,13 +91,12 @@ pipeline {
             steps {
                 echo "🧪 Running Trivy Security Scan..."
                 script {
-                    def templatePath = "${TRIVY_TEMPLATE_DIR}/${TRIVY_TEMPLATE_FILE}"
-                    def scanCmd = "trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update --format template --template @${templatePath} -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME}"
-
                     def scanStatus = sh(script: """
                         mkdir -p ${TRIVY_CACHE_DIR}
                         echo "🔍 Scanning Docker image for vulnerabilities..."
-                        ${scanCmd} || true
+                        trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update \
+                        --format template --template "@contrib/html.tpl" -o trivy-report.html \
+                        --severity HIGH,CRITICAL ${IMAGE_NAME} || false
                     """, returnStatus: true)
 
                     archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
@@ -117,6 +107,7 @@ pipeline {
                             id: 'userDecision', message: '⚠ Trivy detected vulnerabilities. Do you want to continue?',
                             parameters: [choice(choices: ['Stop Pipeline', 'Continue Anyway'], description: 'Select an action')]
                         )
+
                         if (decision == 'Stop Pipeline') {
                             error("🚫 Pipeline stopped due to vulnerabilities.")
                         } else {
@@ -167,10 +158,10 @@ pipeline {
             steps {
                 echo "🩺 Performing Smoke Test on deployed app..."
                 script {
-                    sh "sleep 5"  // تأخير بسيط لتأكد أن الـ container بدأ
-                    def status = sh(script: "curl -o /dev/null -s -w %{http_code} http://192.168.1.3:9090", returnStdout: true).trim()
-                    if (status == "200") {
-                        echo "✅ Application is healthy and responding correctly!"
+                    sh "sleep 5"
+                    def status = sh(script: "curl -o /dev/null -s -w %{http_code} -L http://192.168.1.3:9090", returnStdout: true).trim()
+                    if (status == "200" || status == "302") {
+                        echo "✅ Application is healthy (status: ${status})"
                     } else {
                         error("❌ Application failed health check. Status code: ${status}")
                     }
@@ -191,7 +182,7 @@ pipeline {
                 <p>View build logs and artifacts:</p>
                 <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
                 <hr>
-                <p>Attached is the Trivy security scan report.</p>
+                <p>Attached is the Trivy security scan report (HTML).</p>
                 """,
                 attachLog: false,
                 attachmentsPattern: "trivy-report.html",
