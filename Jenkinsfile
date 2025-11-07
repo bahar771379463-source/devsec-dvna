@@ -9,11 +9,11 @@ pipeline {
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CRED = "vault-credentials"
 
-        // 🟢 بيانات بوت تليجرام
+        // 🔹 Telegram bot
         TELEGRAM_TOKEN = "8531739383:AAEZMh8yZL9mODLOau1pufHoMYHKSsDNDtQ"
         TELEGRAM_CHAT_ID = "1469322337"
 
-        // 🟢 بيانات Twilio (واتساب)
+        // 🔹 Twilio WhatsApp API
         TWILIO_SID = "ACccb4c0aa470c28f1e10b24c618a73b40"
         TWILIO_TOKEN = "77ac6db6d8be1098f5f6eb1c1ee37d3b"
         TWILIO_FROM = "whatsapp:+14155238886"
@@ -95,7 +95,7 @@ pipeline {
                     sh '''
                         ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 "
                         echo '🧹 Removing old container if exists...'
-                        if [ \$(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
+                        if [ $(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
                             docker rm -f ${CONTAINER_NAME}
                         fi
                         echo '📦 Pulling latest image from Docker Hub...'
@@ -126,25 +126,25 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
-            def report_url = "${env.BUILD_URL}artifact/trivy-report.html"
+            script {
+                def report_url = "${env.BUILD_URL}artifact/trivy-report.html"
+                echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
 
-            // ✉ إشعار عبر الإيميل
-            emailext(
-                to: "bahar771379463@gmail.com",
-                subject: "✅ Build Success - Trivy Report Build #${env.BUILD_NUMBER}",
-                body: """
+                // ✉ إشعار بالبريد الإلكتروني
+                emailext(
+                    to: "bahar771379463@gmail.com",
+                    subject: "✅ Build Success - Trivy Report Build #${env.BUILD_NUMBER}",
+                    body: """
 ✅ The pipeline completed successfully!  
 🔗 <a href="${report_url}">View Trivy Report in Jenkins</a>  
 🧩 Project: ${env.JOB_NAME}  
 Build Number: ${env.BUILD_NUMBER}
 """,
-                attachmentsPattern: "trivy-report.html",
-                mimeType: 'text/html'
-            )
+                    attachmentsPattern: "trivy-report.html",
+                    mimeType: 'text/html'
+                )
 
-            // 💬 إشعار تليجرام
-            script {
+                // 💬 إشعار تليجرام
                 def message = """
 🚀 Pipeline Success!
 ✅ Build #${env.BUILD_NUMBER} finished successfully.
@@ -157,10 +157,8 @@ Build Number: ${env.BUILD_NUMBER}
                     -d parse_mode=Markdown \
                     -d text="${message}"
                 """
-            }
 
-            // 💚 إشعار واتساب
-            script {
+                // 💚 إشعار واتساب
                 def body = "✅ Jenkins Build #${env.BUILD_NUMBER} succeeded! View report: ${report_url}"
                 sh """
                     curl -X POST https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json \
@@ -173,28 +171,28 @@ Build Number: ${env.BUILD_NUMBER}
         }
 
         failure {
-            echo "❌ Pipeline failed. Check logs for details."
-            def logs_url = "${env.BUILD_URL}"
+            script {
+                def logs_url = "${env.BUILD_URL}"
+                echo "❌ Pipeline failed. Check logs for details."
 
-            // ❌ إشعار البريد عند الفشل
-            emailext(
-                to: "bahar771379463@gmail.com",
-                subject: "❌ Build Failed - ${env.JOB_NAME}",
-                body: """
+                // ❌ إشعار البريد
+                emailext(
+                    to: "bahar771379463@gmail.com",
+                    subject: "❌ Build Failed - ${env.JOB_NAME}",
+                    body: """
 🚨 Build #${env.BUILD_NUMBER} failed!  
 🔗 <a href="${logs_url}">View Logs in Jenkins</a>
 """,
-                attachmentsPattern: "trivy-report.html",
-                mimeType: 'text/html'
-            )
+                    attachmentsPattern: "trivy-report.html",
+                    mimeType: 'text/html'
+                )
 
-            // 💬 إشعار تليجرام عند الفشل
-            script {
+                // 💬 إشعار تليجرام عند الفشل
                 def message = """
 🚨 Pipeline Failed!
 ❌ Build #${env.BUILD_NUMBER} has failed.
 🧩 Project: ${env.JOB_NAME}
-🔗 [View Logs](${env.BUILD_URL})
+🔗 [View Logs](${logs_url})
 """
                 sh """
                     curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage \
@@ -202,10 +200,8 @@ Build Number: ${env.BUILD_NUMBER}
                     -d parse_mode=Markdown \
                     -d text="${message}"
                 """
-            }
 
-            // 🔴 إشعار واتساب عند الفشل
-            script {
+                // 🔴 إشعار واتساب عند الفشل
                 def body = "❌ Jenkins Build #${env.BUILD_NUMBER} failed! Check logs: ${logs_url}"
                 sh """
                     curl -X POST https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json \
