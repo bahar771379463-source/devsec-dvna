@@ -9,9 +9,29 @@ pipeline {
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CREDENTIALS = "vault-root-tokin"
         TRIVY_CACHE_DIR = "/var/lib/trivy"
+        TRIVY_TEMPLATE_DIR = "contrib"
+        TRIVY_TEMPLATE_FILE = "html.tpl"
     }
 
     stages {
+
+        stage('Initialize Trivy Template') {
+            steps {
+                script {
+                    sh "mkdir -p ${TRIVY_TEMPLATE_DIR}"
+                    if (!fileExists("${TRIVY_TEMPLATE_DIR}/${TRIVY_TEMPLATE_FILE}")) {
+                        echo "📥 Downloading Trivy HTML template..."
+                        sh """
+                        curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
+                        -o ${TRIVY_TEMPLATE_DIR}/${TRIVY_TEMPLATE_FILE}
+                        """
+                        echo "✅ Template downloaded successfully."
+                    } else {
+                        echo "✅ Trivy HTML template already exists. Skipping download."
+                    }
+                }
+            }
+        }
 
         stage('Checkout SCM') {
             steps {
@@ -80,11 +100,8 @@ pipeline {
             steps {
                 echo "🧪 Running Trivy Security Scan..."
                 script {
-                    def templatePath = 'contrib/html.tpl'
-                    def useTemplate = fileExists(templatePath)
-                    def scanCmd = useTemplate ? 
-                        "trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update --format template --template @${templatePath} -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME}" :
-                        "trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update --format json -o trivy-report.json --severity HIGH,CRITICAL ${IMAGE_NAME}"
+                    def templatePath = "${TRIVY_TEMPLATE_DIR}/${TRIVY_TEMPLATE_FILE}"
+                    def scanCmd = "trivy image --cache-dir ${TRIVY_CACHE_DIR} --skip-db-update --format template --template @${templatePath} -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME}"
 
                     def scanStatus = sh(script: """
                         mkdir -p ${TRIVY_CACHE_DIR}
@@ -92,7 +109,7 @@ pipeline {
                         ${scanCmd} || true
                     """, returnStatus: true)
 
-                    archiveArtifacts artifacts: useTemplate ? 'trivy-report.html' : 'trivy-report.json', fingerprint: true
+                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
 
                     if (scanStatus != 0) {
                         echo "🚨 Vulnerabilities detected! Prompting user for action..."
@@ -150,6 +167,7 @@ pipeline {
             steps {
                 echo "🩺 Performing Smoke Test on deployed app..."
                 script {
+                    sh "sleep 5"  // تأخير بسيط لتأكد أن الـ container بدأ
                     def status = sh(script: "curl -o /dev/null -s -w %{http_code} http://192.168.1.3:9090", returnStdout: true).trim()
                     if (status == "200") {
                         echo "✅ Application is healthy and responding correctly!"
@@ -176,7 +194,7 @@ pipeline {
                 <p>Attached is the Trivy security scan report.</p>
                 """,
                 attachLog: false,
-                attachmentsPattern: useTemplate ? "trivy-report.html" : "trivy-report.json",
+                attachmentsPattern: "trivy-report.html",
                 mimeType: 'text/html',
                 to: "youremail@gmail.com"
             )
@@ -196,7 +214,7 @@ pipeline {
                 <p>Attached is the Trivy vulnerability report for review.</p>
                 """,
                 attachLog: true,
-                attachmentsPattern: useTemplate ? "trivy-report.html" : "trivy-report.json",
+                attachmentsPattern: "trivy-report.html",
                 mimeType: 'text/html',
                 to: "bahar771379463@gmail.com"
             )
