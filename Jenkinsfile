@@ -8,6 +8,10 @@ pipeline {
         GIT_CREDENTIALS = "github-credentials"
         VAULT_ADDR = "http://192.168.1.2:8200"
         VAULT_CRED = "vault-credentials"
+
+        // 🟢 أضف معلومات بوت تليجرام هنا
+        TELEGRAM_TOKEN = "8531739383:AAEZMh8yZL9mODLOau1pufHoMYHKSsDNDtQ"
+        TELEGRAM_CHAT_ID = "1469322337"
     }
 
     stages {
@@ -117,21 +121,59 @@ pipeline {
     post {
         success {
             echo "✅ Pipeline completed successfully! (Security Scan + Deploy OK)"
+            
+            // إرسال التقرير إلى البريد الإلكتروني
             emailext(
                 to: "bahar771379463@gmail.com",
                 subject: "✅ Trivy Security Report - Build ${env.BUILD_NUMBER}",
                 body: "Attached is the Trivy security scan report for build ${env.BUILD_NUMBER}.",
                 attachmentsPattern: "trivy-report.html"
             )
+
+            // إرسال إشعار إلى تليجرام مع رابط التقرير
+            script {
+                def report_url = "${env.BUILD_URL}artifact/trivy-report.html"
+                def message = """
+🚀 Pipeline Success!
+✅ Build #${env.BUILD_NUMBER} finished successfully.
+🧩 Project: ${env.JOB_NAME}
+📄 [View Trivy Report](${report_url})
+"""
+                sh """
+                    curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage \
+                    -d chat_id=${TELEGRAM_CHAT_ID} \
+                    -d parse_mode=Markdown \
+                    -d text="${message}"
+                """
+            }
         }
+
         failure {
             echo "❌ Pipeline failed. Check logs for details."
+
+            // إشعار البريد
             emailext(
-                to: "youremail@gmail.com",
+                to: "bahar771379463@gmail.com",
                 subject: "❌ Build Failed - Trivy Security Report",
                 body: "The build ${env.BUILD_NUMBER} failed. Check Jenkins console for details.",
                 attachmentsPattern: "trivy-report.html"
             )
+
+            // إشعار تليجرام عند الفشل
+            script {
+                def message = """
+🚨 Pipeline Failed!
+❌ Build #${env.BUILD_NUMBER} has failed.
+🧩 Project: ${env.JOB_NAME}
+🔗 [View Logs](${env.BUILD_URL})
+"""
+                sh """
+                    curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage \
+                    -d chat_id=${TELEGRAM_CHAT_ID} \
+                    -d parse_mode=Markdown \
+                    -d text="${message}"
+                """
+            }
         }
     }
 }
