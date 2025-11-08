@@ -64,41 +64,73 @@ pipeline {
             }
         }
 
-        stage('Security Scan with Trivy') {
-            steps {
-                script {
-                    def scanStatus = sh(script: '''
-                        mkdir -p /var/lib/trivy
-                        echo "🔍 Scanning Docker image for vulnerabilities..."
-                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format template --template @contrib/html.tpl -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME} || echo "vulns"
-                    ''', returnStatus: true)
+       stage('Security Scan with Trivy') {
+    steps {
+        script {
+            // 1) نركب jq (مهم لتحليل JSON)
+            //    لو نظام الـ agent لا يسمح بالـ apt-get غير مطلوب - أزل السطر أو ركّب jq بطريقة أخرى
+            sh '''
+                set -eux
+                if ! command -v jq >/dev/null 2>&1; then
+                  apt-get update -y || true
+                  apt-get install -y jq || true
+                fi
 
-                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
+                mkdir -p /var/lib/trivy
 
-                    // 🔥 أضفنا هذه الفقرة فقط:
-                    if (scanStatus != 0) {
-                        echo "🚨 تم اكتشاف ثغرات عالية أو حرجة!"
-                        def userChoice = input(
-                            id: 'userConfirm',
-                            message: '⚠ Trivy اكتشف ثغرات أمنية! هل ترغب في الاستمرار بالنشر؟',
-                            parameters: [
-                                [$class: 'ChoiceParameterDefinition', 
-                                 choices: 'توقف\nاستمرار', 
-                                 description: 'اختيارك سيحدد هل يتوقف Jenkins أم يكمل.',
-                                 name: 'قرارك']
-                            ]
-                        )
-                        if (userChoice == 'توقف') {
-                            error("🛑 تم إيقاف الـ Pipeline بناءً على قرار المستخدم.")
-                        } else {
-                            echo "✅ تم اختيار الاستمرار رغم وجود الثغرات."
-                        }
-                    } else {
-                        echo "✅ لم يتم اكتشاف أي ثغرات حرجة."
-                    }
+                echo "🔍 Running Trivy scan (JSON output) ..."
+                # نفحص ونسجل النتيجة بصيغة JSON (نسمح بأن يعود exit code !=0 لأننا نريد تحليل التقرير)
+                trivy image --cache-dir /var/lib/trivy --skip-db-update --format json -o trivy-report.json --severity HIGH,CRITICAL ${IMAGE_NAME} || true
+
+                # عدّ الثغرات HIGH أو CRITICAL من ملف JSON
+                if [ -s trivy-report.json ]; then
+                  VCOUNT=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-report.json)
+                else
+                  VCOUNT=0
+                fi
+                echo $VCOUNT > trivy-vuln-count.txt
+                echo "Found $VCOUNT HIGH/CRITICAL vulnerabilities."
+
+                # بعد ما حسبنا، نولّد تقرير HTML (لـ humans)
+                # (يعمل مسح آخر ولكن الناتج HTML أُفضل للمعاينة؛ إن أردت تتجنب المسح المزدوج نقدر ننشئ HTML من JSON لكن هذه الطريقة أبسط)
+                mkdir -p contrib
+                curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o contrib/html.tpl
+                trivy image --cache-dir /var/lib/trivy --skip-db-update --format template --template @contrib/html.tpl -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME} || true
+            '''
+
+            // 2) قراءة العدد من الملف وتخزينه في متغير بيئي ليستخدم لاحقاً
+            def vcount = readFile('trivy-vuln-count.txt').trim()
+            if (!vcount) { vcount = "0" }
+            env.VULN_COUNT = vcount
+            echo ">> VULN_COUNT = ${env.VULN_COUNT}"
+
+            // 3) أرشفة التقرير HTML
+            archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
+
+            // 4) إذا العدد أكبر من 0 — اسأل المستخدم هل يكمل أو يوقف
+            if (env.VULN_COUNT != "0") {
+                echo "🚨 Detected ${env.VULN_COUNT} HIGH/CRITICAL vulnerabilities."
+                def userChoice = input(
+                    id: 'userConfirm',
+                    message: "⚠ Trivy اكتشف ${env.VULN_COUNT} ثغرة(ثغرات) HIGH/CRITICAL. هل تريد المتابعة؟",
+                    parameters: [
+                        [$class: 'ChoiceParameterDefinition',
+                         choices: "توقف\nاستمرار",
+                         description: 'اختر: توقف لإيقاف الـ pipeline، استمرار لتكملة النشر.',
+                         name: 'قرار']
+                    ]
+                )
+                if (userChoice == 'توقف') {
+                    error("🛑 التوقف بناءً على قرار المستخدم (اكتُشفت ${env.VULN_COUNT} ثغرات).")
+                } else {
+                    echo "✅ تم اختيار الاستمرار رغم وجود ${env.VULN_COUNT} ثغرات."
                 }
+            } else {
+                echo "✅ No HIGH/CRITICAL vulnerabilities found."
             }
         }
+    }
+}
 
         stage('Push to Docker Hub') {
             steps {
@@ -114,7 +146,7 @@ pipeline {
                         echo '🧹 Removing old container if exists...'
                         if [ $(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
                             docker rm -f ${CONTAINER_NAME}
-                            
+
                         fi
                         echo '📦 Pulling latest image from Docker Hub...'
                         docker pull ${IMAGE_NAME}
