@@ -181,20 +181,20 @@ pipeline {
             steps {  
                 sshagent(credentials: ['ssh-test-server']) {  
                     sh """
-ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 '
-OLD_CONTAINERS=\$(docker ps -aq -f name=${CONTAINER_NAME})
-if [ ! -z "\$OLD_CONTAINERS" ]; then
+    ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 '
+    OLD_CONTAINERS=\$(docker ps -aq -f name=${CONTAINER_NAME})
+    if [ ! -z "\$OLD_CONTAINERS" ]; then
     echo "🧹 Removing old container(s)..."
     docker rm -f \$OLD_CONTAINERS
-fi
+    fi
 
-echo "📦 Pulling latest image..."
-docker pull ${IMAGE_NAME}
+    echo "📦 Pulling latest image..."
+    docker pull ${IMAGE_NAME}
 
-echo "🚀 Running container..."
-docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
-'
-                    """
+    echo "🚀 Running container..."
+    docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
+    '
+                         """
                 }  
             }  
         }  
@@ -227,17 +227,17 @@ docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
             script {  
                 def report_url = "${env.BUILD_URL}artifact/security-summary.html"  
                 def message = """  
-🚀 Pipeline Success!  
-✅ Build #${env.BUILD_NUMBER} finished successfully.  
-🧩 Project: ${env.JOB_NAME}  
-📄 [View Unified Security Report](${report_url})  
-"""  
+    🚀 Pipeline Success!  
+    ✅ Build #${env.BUILD_NUMBER} finished successfully.  
+    🧩 Project: ${env.JOB_NAME}  
+    📄 [View Unified Security Report](${report_url})  
+    """  
                 sh """
-curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
---data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
---data-urlencode "parse_mode=Markdown" \\
---data-urlencode "text=$(echo \"$message\")"
-""" 
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
+    --data-urlencode "parse_mode=Markdown" \\
+    --data-urlencode "text=$(echo \"$message\")"
+    """ 
             }  
         }  
 
@@ -252,18 +252,18 @@ curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 
             script {  
                 def message = """  
-🚨 Pipeline Failed!  
-❌ Build #${env.BUILD_NUMBER} has failed.  
-🧩 Project: ${env.JOB_NAME}  
-🔗 [View Logs](${env.BUILD_URL})  
-"""  
-                sh """
-curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
---data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
---data-urlencode "parse_mode=Markdown" \\
---data-urlencode "text=$(echo \"$message\")"
-"""
+    🚨 Pipeline Failed!  
+    ❌ Build #${env.BUILD_NUMBER} has failed.  
+    🧩 Project: ${env.JOB_NAME}  
+    🔗 [View Logs](${env.BUILD_URL})  
+    """  
+                    sh """
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
+    --data-urlencode "parse_mode=Markdown" \\
+    --data-urlencode "text=$(echo \"$message\")"
+    """
+                }  
             }  
         }  
-    }  
-}
+    }
