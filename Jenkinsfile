@@ -67,13 +67,36 @@ pipeline {
         stage('Security Scan with Trivy') {
             steps {
                 script {
-                    sh '''
+                    def scanStatus = sh(script: '''
                         mkdir -p /var/lib/trivy
                         echo "🔍 Scanning Docker image for vulnerabilities..."
-                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format template --template @contrib/html.tpl -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME}
-                    '''
+                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format template --template @contrib/html.tpl -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME} || echo "vulns"
+                    ''', returnStatus: true)
+
+                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
+
+                    // 🔥 أضفنا هذه الفقرة فقط:
+                    if (scanStatus != 0) {
+                        echo "🚨 تم اكتشاف ثغرات عالية أو حرجة!"
+                        def userChoice = input(
+                            id: 'userConfirm',
+                            message: '⚠ Trivy اكتشف ثغرات أمنية! هل ترغب في الاستمرار بالنشر؟',
+                            parameters: [
+                                [$class: 'ChoiceParameterDefinition', 
+                                 choices: 'توقف\nاستمرار', 
+                                 description: 'اختيارك سيحدد هل يتوقف Jenkins أم يكمل.',
+                                 name: 'قرارك']
+                            ]
+                        )
+                        if (userChoice == 'توقف') {
+                            error("🛑 تم إيقاف الـ Pipeline بناءً على قرار المستخدم.")
+                        } else {
+                            echo "✅ تم اختيار الاستمرار رغم وجود الثغرات."
+                        }
+                    } else {
+                        echo "✅ لم يتم اكتشاف أي ثغرات حرجة."
+                    }
                 }
-                archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
             }
         }
 
