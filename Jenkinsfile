@@ -114,6 +114,7 @@ pipeline {
                         echo '🧹 Removing old container if exists...'
                         if [ $(docker ps -aq -f name=${CONTAINER_NAME}) ]; then
                             docker rm -f ${CONTAINER_NAME}
+                            
                         fi
                         echo '📦 Pulling latest image from Docker Hub...'
                         docker pull ${IMAGE_NAME}
