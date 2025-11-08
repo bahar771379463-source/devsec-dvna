@@ -9,10 +9,9 @@ pipeline {
         VAULT_ADDR = "http://192.168.1.2:8200"  
         VAULT_CRED = "vault-credentials"  
 
-        // 🟢 معلومات بوت تليجرام  
         TELEGRAM_TOKEN = "8531739383:AAEZMh8yZL9mODLOau1pufHoMYHKSsDNDtQ"  
         TELEGRAM_CHAT_ID = "1469322337" 
-        SNYK_TOKEN="7a0193bc-0276-4282-94ac-80127c3b09c9" 
+        SNYK_TOKEN="7a0193bc-0276-4282-94ac-80127c3b09c9"
     }  
 
     stages {  
@@ -25,7 +24,7 @@ pipeline {
         stage('Initialize Trivy Template') {  
             steps {  
                 sh '''  
-                    mkdir -p contrib  
+                    mkdir -p contrib /var/lib/trivy
                     curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o contrib/html.tpl  
                 '''  
             }  
@@ -74,15 +73,16 @@ pipeline {
                                 npm install -g snyk snyk-to-html || true
                             fi
 
-                            snyk auth ${SNYK_TOKEN}
-                            snyk test --json > snyk-report.json || true
+                            npx snyk auth ${SNYK_TOKEN}
+                            npx snyk test --json > snyk-report.json || true
+
                             if [ -s snyk-report.json ]; then
                                 COUNT=$(jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' snyk-report.json)
                             else
                                 COUNT=0
                             fi
                             echo $COUNT > snyk-count.txt
-                            snyk-to-html -i snyk-report.json -o snyk-report.html || true
+                            npx snyk-to-html -i snyk-report.json -o snyk-report.html || true
                         '''
                         env.SNYK_COUNT = readFile('snyk-count.txt').trim()
                         archiveArtifacts artifacts: 'snyk-report.html', fingerprint: true
@@ -96,7 +96,6 @@ pipeline {
                 script {  
                     sh '''  
                         set -eux  
-                        mkdir -p /var/lib/trivy  
 
                         trivy image --cache-dir /var/lib/trivy --skip-db-update --format json -o trivy-report.json --severity HIGH,CRITICAL ${IMAGE_NAME} || true  
 
@@ -107,8 +106,6 @@ pipeline {
                         fi  
                         echo $VCOUNT > trivy-vuln-count.txt  
 
-                        mkdir -p contrib  
-                        curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o contrib/html.tpl  
                         trivy image --cache-dir /var/lib/trivy --skip-db-update --format template --template @contrib/html.tpl -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME} || true  
                     '''  
 
@@ -117,6 +114,15 @@ pipeline {
                 }  
             }  
         }  
+
+        stage('Approval to Continue') {
+            when {
+                expression { (env.SNYK_COUNT.toInteger() + env.VULN_COUNT.toInteger()) > 0 }
+            }
+            steps {
+                input message: "⚠ Found HIGH/CRITICAL vulnerabilities. Continue deployment?", ok: "Yes, Continue"
+            }
+        }
 
         stage('Generate Unified Security Report') {
             steps {
@@ -230,7 +236,7 @@ docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
 curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
---data-urlencode "text=${message}"
+--data-urlencode "text=$(echo \"$message\")"
 """ 
             }  
         }  
@@ -255,7 +261,7 @@ curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
---data-urlencode "text=${message}"
+--data-urlencode "text=$(echo \"$message\")"
 """
             }  
         }  
