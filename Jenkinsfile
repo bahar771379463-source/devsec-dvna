@@ -311,13 +311,12 @@ pipeline {
 ✅ Build #${env.BUILD_NUMBER} finished successfully.  
 🧩 Project: ${env.JOB_NAME}  
 📄 [View Unified Security Report](${report_url})  
-"""  
-                sh """  
-                    curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage 
-                    -d chat_id=${TELEGRAM_CHAT_ID} 
-                    -d parse_mode=Markdown  
-                    -d text="${message}"  
-                """  
+"""  sh """
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
+    --data-urlencode "parse_mode=Markdown" \\
+    --data-urlencode "text=${message}"
+""" 
             }  
         }  
   
@@ -338,12 +337,12 @@ pipeline {
 🧩 Project: ${env.JOB_NAME}  
 🔗 [View Logs](${env.BUILD_URL})  
 """  
-                sh """  
-                    curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage 
-                    -d chat_id=${TELEGRAM_CHAT_ID}  
-                    -d parse_mode=Markdown  
-                    -d text="${message}"  
-                """  
+               sh """
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
+    --data-urlencode "parse_mode=Markdown" \\
+    --data-urlencode "text=${message}"
+"""
             }  
         }  
     }  
