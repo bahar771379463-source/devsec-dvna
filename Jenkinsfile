@@ -26,54 +26,61 @@ pipeline {
 
         stage('Build or Use Existing Image') { steps { script { sh "docker pull ${IMAGE_NAME} || true" } } }  
 
-        stage('Snyk Security Scan') {
-            steps { script {
-                echo "🧠 Running Snyk vulnerability scan on source code..."
-                withVault([vaultSecrets: [[path: 'secret/snyk-token', secretValues: [[envVar: 'SNYK_TOKEN', vaultKey: 'token']]]]]) {
-                    sh '''
-                        export PATH=$PATH:/tmp/snyk/bin
-                        if ! command -v snyk >/dev/null 2>&1; then
-                            echo "⬇ Installing Snyk CLI..."
-                            npm install -g snyk snyk-to-html --prefix /tmp/snyk
-                            export PATH=$PATH:/tmp/snyk/bin
-                        fi
+       stage('Snyk Security Scan') {
+    steps { 
+        script {
+            echo "🧠 Running Snyk vulnerability scan on source code..."
+            withVault([vaultSecrets: [[path: 'secret/snyk-token', secretValues: [[envVar: 'SNYK_TOKEN', vaultKey: 'token']]]]]) {
+                sh '''
+                    # التأكد من تثبيت Snyk CLI و snyk-to-html
+                    if [ ! -f /tmp/snyk/bin/snyk ]; then
+                        echo "⬇ Installing Snyk CLI..."
+                        npm install -g snyk snyk-to-html --prefix /tmp/snyk
+                    fi
+                    export PATH=$PATH:/tmp/snyk/bin
 
-                        snyk auth ${SNYK_TOKEN}
-                        echo "🔍 Scanning source code for vulnerabilities..."
-                        snyk test --json > snyk-report.json || true
+                    snyk auth ${SNYK_TOKEN}
 
-                        if [ -s snyk-report.json ]; then
-                            COUNT=$(jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' snyk-report.json)
-                        else
-                            COUNT=0
-                        fi
-                        echo $COUNT > snyk-count.txt
-                        echo "Found $COUNT HIGH/CRITICAL vulnerabilities."
+                    echo "🔍 Scanning source code for vulnerabilities..."
+                    snyk test --json > snyk-report.json || true
 
-                        snyk-to-html -i snyk-report.json -o snyk-report.html || true
-                    '''
+                    if [ -s snyk-report.json ]; then
+                        COUNT=$(/tmp/snyk/bin/jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' snyk-report.json)
+                    else
+                        COUNT=0
+                    fi
+                    echo $COUNT > snyk-count.txt
+                    echo "Found $COUNT HIGH/CRITICAL vulnerabilities."
 
-                    def snykCount = readFile('snyk-count.txt').trim()
-                    if (!snykCount) { snykCount = "0" }
-                    env.SNYK_COUNT = snykCount
-                    echo ">> SNYK_COUNT = ${env.SNYK_COUNT}"
+                    # استخدام المسار الكامل للأداة
+                    /tmp/snyk/bin/snyk-to-html -i snyk-report.json -o snyk-report.html || true
+                '''
 
-                    archiveArtifacts artifacts: 'snyk-report.html', fingerprint: true
+                def snykCount = readFile('snyk-count.txt').trim()
+                if (!snykCount) { snykCount = "0" }
+                env.SNYK_COUNT = snykCount
+                echo ">> SNYK_COUNT = ${env.SNYK_COUNT}"
 
-                    if (env.SNYK_COUNT != "0") {
-                        echo "🚨 Detected ${env.SNYK_COUNT} HIGH/CRITICAL vulnerabilities in code."
-                        def choice = input(
-                            id: 'snykConfirm',
-                            message: "⚠ تم اكتشاف ${env.SNYK_COUNT} ثغرة (High/Critical) من Snyk. هل تريد المتابعة؟",
-                            parameters: [
-                                [$class: 'ChoiceParameterDefinition', choices: "توقف\nاستمرار", description: 'اختر "توقف" لإيقاف الـ pipeline أو "استمرار" لإكمال المراحل التالية.', name: 'قرار']
-                            ]
-                        )
-                        if (choice == 'توقف') { error("🛑 تم إيقاف الـ pipeline بناءً على قرار المستخدم بعد Snyk Scan.") } else { echo "✅ تم اختيار الاستمرار بعد Snyk scan رغم وجود ثغرات." }
-                    } else { echo "✅ No HIGH/CRITICAL vulnerabilities detected by Snyk." }
+                archiveArtifacts artifacts: 'snyk-report.html', fingerprint: true
+
+                if (env.SNYK_COUNT != "0") {
+                    echo "🚨 Detected ${env.SNYK_COUNT} HIGH/CRITICAL vulnerabilities in code."
+                    def choice = input(
+                        id: 'snykConfirm',
+                        message: "⚠ تم اكتشاف ${env.SNYK_COUNT} ثغرة (High/Critical) من Snyk. هل تريد المتابعة؟",
+                        parameters: [
+                            [$class: 'ChoiceParameterDefinition', choices: "توقف\nاستمرار", description: 'اختر "توقف" لإيقاف الـ pipeline أو "استمرار" لإكمال المراحل التالية.', name: 'قرار']
+                        ]
+                    )
+                    if (choice == 'توقف') { error("🛑 تم إيقاف الـ pipeline بناءً على قرار المستخدم بعد Snyk Scan.") } 
+                    else { echo "✅ تم اختيار الاستمرار بعد Snyk scan رغم وجود ثغرات." }
+                } else { 
+                    echo "✅ No HIGH/CRITICAL vulnerabilities detected by Snyk." 
                 }
-            } } 
-        }
+            }
+        } 
+    }
+}
 
         stage('Security Scan with Trivy') { steps { script {
             sh '''
