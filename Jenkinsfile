@@ -313,9 +313,9 @@ pipeline {
 📄 [View Unified Security Report](${report_url})  
 """  
                 sh """  
-                    curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage \  
-                    -d chat_id=${TELEGRAM_CHAT_ID} \  
-                    -d parse_mode=Markdown \  
+                    curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage 
+                    -d chat_id=${TELEGRAM_CHAT_ID} 
+                    -d parse_mode=Markdown  
                     -d text="${message}"  
                 """  
             }  
@@ -339,9 +339,9 @@ pipeline {
 🔗 [View Logs](${env.BUILD_URL})  
 """  
                 sh """  
-                    curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage \  
-                    -d chat_id=${TELEGRAM_CHAT_ID} \  
-                    -d parse_mode=Markdown \  
+                    curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage 
+                    -d chat_id=${TELEGRAM_CHAT_ID}  
+                    -d parse_mode=Markdown  
                     -d text="${message}"  
                 """  
             }  
