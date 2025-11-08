@@ -26,36 +26,50 @@ pipeline {
 
         stage('Build or Use Existing Image') { steps { script { sh "docker pull ${IMAGE_NAME} || true" } } }  
 
-       stage('Snyk Security Scan') {
-    steps { 
+      stage('Snyk Security Scan') {
+    steps {
         script {
             echo "🧠 Running Snyk vulnerability scan on source code..."
             withVault([vaultSecrets: [[path: 'secret/snyk-token', secretValues: [[envVar: 'SNYK_TOKEN', vaultKey: 'token']]]]]) {
                 sh '''
-                    # التأكد من تثبيت Snyk CLI و snyk-to-html
-                    if [ ! -f /tmp/snyk/bin/snyk ]; then
-                        echo "⬇ Installing Snyk CLI..."
-                        npm install -g snyk snyk-to-html --prefix /tmp/snyk
+                    # تأكد أن jq موجود على النظام
+                    if ! command -v jq >/dev/null 2>&1; then
+                        echo "⬇ Installing jq..."
+                        apt-get update -y || true
+                        apt-get install -y jq || true
                     fi
+
+                    # أضف Snyk إلى PATH
                     export PATH=$PATH:/tmp/snyk/bin
 
+                    # تثبيت Snyك و snyk-to-html إذا غير موجودين
+                    if ! command -v snyk >/dev/null 2>&1; then
+                        echo "⬇ Installing Snyk CLI..."
+                        npm install -g snyk snyk-to-html --prefix /tmp/snyk
+                        export PATH=$PATH:/tmp/snyk/bin
+                    fi
+
+                    # Authenticate Snyk
                     snyk auth ${SNYK_TOKEN}
 
                     echo "🔍 Scanning source code for vulnerabilities..."
                     snyk test --json > snyk-report.json || true
 
+                    # عد الثغرات High/ Critical
                     if [ -s snyk-report.json ]; then
-                        COUNT=$(/tmp/snyk/bin/jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' snyk-report.json)
+                        COUNT=$(jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' snyk-report.json)
                     else
                         COUNT=0
                     fi
+
                     echo $COUNT > snyk-count.txt
                     echo "Found $COUNT HIGH/CRITICAL vulnerabilities."
 
-                    # استخدام المسار الكامل للأداة
-                    /tmp/snyk/bin/snyk-to-html -i snyk-report.json -o snyk-report.html || true
+                    # تحويل التقرير إلى HTML
+                    snyk-to-html -i snyk-report.json -o snyk-report.html || true
                 '''
 
+                // قراءة عدد الثغرات للـ pipeline
                 def snykCount = readFile('snyk-count.txt').trim()
                 if (!snykCount) { snykCount = "0" }
                 env.SNYK_COUNT = snykCount
@@ -63,8 +77,8 @@ pipeline {
 
                 archiveArtifacts artifacts: 'snyk-report.html', fingerprint: true
 
+                // خيار المستخدم عند وجود ثغرات
                 if (env.SNYK_COUNT != "0") {
-                    echo "🚨 Detected ${env.SNYK_COUNT} HIGH/CRITICAL vulnerabilities in code."
                     def choice = input(
                         id: 'snykConfirm',
                         message: "⚠ تم اكتشاف ${env.SNYK_COUNT} ثغرة (High/Critical) من Snyk. هل تريد المتابعة؟",
@@ -74,11 +88,9 @@ pipeline {
                     )
                     if (choice == 'توقف') { error("🛑 تم إيقاف الـ pipeline بناءً على قرار المستخدم بعد Snyk Scan.") } 
                     else { echo "✅ تم اختيار الاستمرار بعد Snyk scan رغم وجود ثغرات." }
-                } else { 
-                    echo "✅ No HIGH/CRITICAL vulnerabilities detected by Snyk." 
-                }
+                } else { echo "✅ No HIGH/CRITICAL vulnerabilities detected by Snyk." }
             }
-        } 
+        }
     }
 }
 
