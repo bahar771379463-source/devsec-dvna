@@ -310,7 +310,7 @@ docker run -d --name ${CONTAINER_NAME} -p 9091:9091 ${IMAGE_NAME}
 """  
                 sh """
 curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
---data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
+--data-urlencode "chat_id=\${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "text=$(echo \"$message\")"
 """
             }  
