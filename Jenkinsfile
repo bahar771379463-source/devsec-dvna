@@ -11,6 +11,7 @@ pipeline {
 
         TELEGRAM_TOKEN = "8531739383:AAEZMh8yZL9mODLOau1pufHoMYHKSsDNDtQ"
         TELEGRAM_CHAT_ID = "1469322337"
+        SNYK_TOKEN="7a0193bc-0276-4282-94ac-80127c3b09c9"
     }
 
     stages {
