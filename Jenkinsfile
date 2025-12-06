@@ -35,7 +35,7 @@ pipeline {
                     [envVar: 'DOCKER_USER', vaultKey: 'username'],
                     [envVar: 'DOCKER_PASS', vaultKey: 'password']
                 ]]]]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
                 }
             }
         }
@@ -68,7 +68,7 @@ pipeline {
                             npm install -g snyk snyk-to-html || true
                         fi
 
-                        snyk auth ${SNYK_TOKEN}
+                        snyk auth "${SNYK_TOKEN}"
                         snyk test --json > snyk-report.json || true
                         if [ -s snyk-report.json ]; then
                             COUNT=$(jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' snyk-report.json)
@@ -89,14 +89,14 @@ pipeline {
                 script {
                     sh '''
                         set -eux
-                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format json -o trivy-report.json --severity HIGH,CRITICAL ${IMAGE_NAME} || true
+                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format json -o trivy-report.json --severity HIGH,CRITICAL "${IMAGE_NAME}" || true
                         if [ -s trivy-report.json ]; then
                           VCOUNT=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-report.json)
                         else
                           VCOUNT=0
                         fi
                         echo $VCOUNT > trivy-vuln-count.txt
-                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format template --template @contrib/html.tpl -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME} || true
+                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format template --template @contrib/html.tpl -o trivy-report.html --severity HIGH,CRITICAL "${IMAGE_NAME}" || true
                     '''
                     env.VULN_COUNT = readFile('trivy-vuln-count.txt').trim()
                     archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
@@ -128,12 +128,10 @@ pipeline {
 ❌ User chose to stop after security scan.  
 📄 Snyk and Trivy reports attached.
 """
-                        sh """
-curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
+                        sh """curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
---data-urlencode "text=$(echo \"$message\")"
-"""
+--data-urlencode "text=${message}" """
                         error("Pipeline stopped by user.")
                     } else {
                         echo "✅ User approved to continue."
@@ -247,12 +245,10 @@ docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
 ❌ User chose to stop before Production deployment.  
 📄 Snyk and Trivy reports attached.
 """
-                        sh """
-curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
+                        sh """curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
---data-urlencode "text=$(echo \"$message\")"
-"""
+--data-urlencode "text=${message}" """
                         error("Pipeline stopped by user.")
                     } else {
                         echo "✅ User approved Production deployment."
@@ -309,12 +305,10 @@ docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
 ✅ Build #${env.BUILD_NUMBER} finished successfully.  
 📄 [View Unified Security Report](${report_url})
 """
-                sh """
-curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
+                sh """curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
---data-urlencode "text=$(echo \"$message\")"
-"""
+--data-urlencode "text=${message}" """
             }
         }
 
@@ -332,12 +326,10 @@ curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 ❌ Build #${env.BUILD_NUMBER} has failed.  
 🔗 [View Logs](${env.BUILD_URL})
 """
-                sh """
-curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
+                sh """curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
---data-urlencode "text=$(echo \"$message\")"
-"""
+--data-urlencode "text=${message}" """
             }
         }
     }
