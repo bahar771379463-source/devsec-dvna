@@ -4,8 +4,8 @@ pipeline {
     environment {  
         IMAGE_NAME = "bahar771379463/bahar771379:latest"  
         CONTAINER_NAME = "dvna"  
-        GIT_REPO = "git://github.com/bahar771379463-source/devsec-dvna.git"  
-        GIT_CREDENTIALS = "github-ssh-credentials"  
+        GIT_REPO = "https://github.com/bahar771379463-source/devsec-dvna.git"  
+        GIT_CREDENTIALS = "github-credentials"  
         VAULT_ADDR = "http://192.168.1.2:8200"  
         VAULT_CRED = "vault-credentials"  
 
@@ -293,12 +293,12 @@ curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 🧩 Project: ${env.JOB_NAME}  
 📄 [View Unified Security Report](${report_url})  
 """  
-                sh '''
+                sh """
 'curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
 --data-urlencode "text=$(echo \"$message\")"
-'''
+""" 
             }  
         }  
 
@@ -318,12 +318,12 @@ curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 🧩 Project: ${env.JOB_NAME}  
 🔗 [View Logs](${env.BUILD_URL})  
 """  
-                sh '''
+                sh """
 curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
 --data-urlencode "text=$(echo \"$message\")"
-'''
+"""
             }  
         }  
     }  
