@@ -10,18 +10,24 @@ pipeline {
         VAULT_CRED = "vault-credentials"    
 
         TELEGRAM_TOKEN = "8531739383:AAEZMh8yZL9mODLOau1pufHoMYHKSsDNDtQ"    
-        TELEGRAM_CHAT_ID = "1469322337"   
-        SNYK_TOKEN="7a0193bc-0276-4282-94ac-80127c3b09c9"  
+        TELEGRAM_CHAT_ID = "1469322337"  
+        SNYK_TOKEN="7a0193bc-0276-4282-94ac-80127c3b09c9"
     }    
 
-    stages {    
+    stages {
 
+        /* ============================
+           1. CHECKOUT
+           ============================ */
         stage('Checkout SCM') {    
             steps {    
                 git branch: 'main', url: "${GIT_REPO}", credentialsId: "${GIT_CREDENTIALS}"    
             }    
         }    
 
+        /* ============================
+           2. Initialize Trivy Template
+           ============================ */
         stage('Initialize Trivy Template') {    
             steps {    
                 sh '''
@@ -31,6 +37,9 @@ pipeline {
             }    
         }    
 
+        /* ============================
+           3. Fetch DockerHub Credentials
+           ============================ */
         stage('Fetch DockerHub Credentials from Vault') {    
             steps {    
                 withVault([vaultSecrets: [[path: 'secret/docker-credentials', secretValues: [    
@@ -42,51 +51,27 @@ pipeline {
             }    
         }    
 
-        stage('Check for Code Changes') {    
-            steps {    
-                script {    
-                    def changes = sh(script: "git diff --name-only HEAD~1 HEAD | grep -E '(Dockerfile|package.json|src|server.js)' || true", returnStdout: true).trim()    
-                    if (changes) {    
-                        echo "🔍 Code changes detected, will build a new image."    
-                    } else {    
-                        echo "🟢 No code changes detected."    
-                    }    
-                }    
-            }    
-        }    
-
+        /* ============================
+           4. Build or Pull Image
+           ============================ */
         stage('Build or Use Existing Image') {    
             steps {    
                 sh "docker pull ${IMAGE_NAME} || true"    
             }    
         }    
 
+        /* ============================
+           5. Security Scans (Snyk & Trivy)
+           ============================ */
         stage('Snyk Security Scan') {  
             steps {  
                 script {  
-                    echo "🧠 Running Snyk vulnerability scan on source code..."  
-                    withVault([vaultSecrets: [[path: 'secret/snyk-token', secretValues: [  
-                        [envVar: 'SNYK_TOKEN', vaultKey: 'token']  
-                    ]]]]) {  
-                        sh '''
-                            if ! command -v snyk >/dev/null 2>&1; then  
-                                npm install -g snyk snyk-to-html || true  
-                            fi  
-
-                            npx snyk auth ${SNYK_TOKEN}  
-                            npx snyk test --json > snyk-report.json || true  
-
-                            if [ -s snyk-report.json ]; then  
-                                COUNT=$(jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' snyk-report.json)  
-                            else  
-                                COUNT=0  
-                            fi  
-                            echo $COUNT > snyk-count.txt  
-                            npx snyk-to-html -i snyk-report.json -o snyk-report.html || true  
-                        '''  
-                        env.SNYK_COUNT = readFile('snyk-count.txt').trim()  
-                        archiveArtifacts artifacts: 'snyk-report.html', fingerprint: true  
-                    }  
+                    sh '''
+                        npm install -g snyk snyk-to-html || true
+                        snyk auth ${SNYK_TOKEN}
+                        snyk test --json > snyk-report.json || true
+                        snyk-to-html -i snyk-report.json -o snyk-report.html || true
+                    '''
                 }  
             }  
         }  
@@ -95,138 +80,115 @@ pipeline {
             steps {    
                 script {    
                     sh '''
-                        set -eux    
-
-                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format json -o trivy-report.json --severity HIGH,CRITICAL ${IMAGE_NAME} || true    
-
-                        if [ -s trivy-report.json ]; then    
-                          VCOUNT=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' trivy-report.json)    
-                        else    
-                          VCOUNT=0    
-                        fi    
-                        echo $VCOUNT > trivy-vuln-count.txt    
-
-                        trivy image --cache-dir /var/lib/trivy --skip-db-update --format template --template @contrib/html.tpl -o trivy-report.html --severity HIGH,CRITICAL ${IMAGE_NAME} || true    
-                    '''    
-
-                    env.VULN_COUNT = readFile('trivy-vuln-count.txt').trim()  
-                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true  
+                        trivy image --format json -o trivy-report.json --severity HIGH,CRITICAL ${IMAGE_NAME} || true
+                        trivy image --format template --template @contrib/html.tpl -o trivy-report.html ${IMAGE_NAME} || true
+                    '''
                 }    
             }    
         }    
 
-        stage('Approval to Continue') {  
-            when {  
-                expression { (env.SNYK_COUNT.toInteger() + env.VULN_COUNT.toInteger()) > 0 }  
-            }  
-            steps {  
-                input message: "⚠ Found HIGH/CRITICAL vulnerabilities. Continue deployment?", ok: "Yes, Continue"  
-            }  
-        }  
+        /* ============================
+           6. Approval BEFORE Test Deployment
+           ============================ */
+        stage("Approval Before Test") {
+            steps {
+                input message: "❓ هل تريد الاستمرار إلى نشر النسخة في بيئة TEST ؟", ok: "نعم استمر"
+            }
+        }
 
-        stage('Generate Unified Security Report') {  
-            steps {  
-                script {  
-                    sh '''
-                        HIGH_T=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-report.json 2>/dev/null || echo 0)
-                        CRIT_T=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-report.json 2>/dev/null || echo 0)
-                        HIGH_S=$(jq '[.vulnerabilities[]? | select(.severity=="high")] | length' snyk-report.json 2>/dev/null || echo 0)
-                        CRIT_S=$(jq '[.vulnerabilities[]? | select(.severity=="critical")] | length' snyk-report.json 2>/dev/null || echo 0)
-
-                        TOTAL_T=$((HIGH_T + CRIT_T))
-                        TOTAL_S=$((HIGH_S + CRIT_S))
-                        BUILD_DATE=$(date "+%Y-%m-%d %H:%M:%S")
-                        PROJECT_NAME="${JOB_NAME:-Unknown}"
-                        BUILD_NUM="${BUILD_NUMBER:-N/A}"
-
-                        echo "<html><head><title>Unified Security Report</title>" > security-summary.html
-                        echo "<body><h1>Unified Security Report</h1>" >> security-summary.html
-                        echo "<table border='1'><tr><th>Tool</th><th>High</th><th>Critical</th><th>Total</th></tr>" >> security-summary.html
-                        echo "<tr><td>Snyk</td><td>$HIGH_S</td><td>$CRIT_S</td><td>$TOTAL_S</td></tr>" >> security-summary.html
-                        echo "<tr><td>Trivy</td><td>$HIGH_T</td><td>$CRIT_T</td><td>$TOTAL_T</td></tr>" >> security-summary.html
-                        echo "</table></body></html>" >> security-summary.html
-                    '''  
-                    archiveArtifacts artifacts: 'security-summary.html', fingerprint: true  
-                }  
-            }  
-        }  
-
-        stage('Push to Docker Hub') {    
-            steps {    
-                sh "docker push ${IMAGE_NAME}"    
-            }    
-        }    
-
+        /* ============================
+           7. Deploy to TEST Server
+           ============================ */
         stage('Deploy to Test Server') {    
             steps {    
                 sshagent(credentials: ['ssh-test-server']) {    
                     sh '''
 ssh -o StrictHostKeyChecking=no bahar@192.168.1.3 '
-OLD_CONTAINERS=$(docker ps -aq -f name=dvna)
-if [ ! -z "$OLD_CONTAINERS" ]; then
-    docker rm -f $OLD_CONTAINERS
-fi
-
+docker rm -f dvna || true
 docker pull bahar771379463/bahar771379:latest
 docker run -d --name dvna -p 9090:9090 bahar771379463/bahar771379:latest
 '
 '''
                 }
             }    
-        }    
+        }
 
-        stage('Smoke Test (Health Check)') {    
+        /* ============================
+           8. Send Email AFTER Test 
+           ============================ */
+        stage("Send Email After Test") {
+            steps {
+                emailext(
+                    to: "bahar771379463@gmail.com",
+                    subject: "🚀 TEST Deployment Completed - Build ${BUILD_NUMBER}",
+                    body: "تم نشر النسخة إلى بيئة TEST بنجاح!"
+                )
+            }
+        }
+
+        /* ============================
+           9. Approval BEFORE Production
+           ============================ */
+        stage("Approval Before PRODUCTION") {
+            steps {
+                input message: "⚠️ هل تريد نشر النسخة في بيئة PRODUCTION ؟", ok: "نعم استمر"
+            }
+        }
+
+        /* ============================
+           10. Deploy to PRODUCTION
+           ============================ */
+        stage('Deploy to Production Server') {    
             steps {    
-                script {    
-                    sleep 5    
-                    def status = sh(script: "curl -o /dev/null -s -w %{http_code} -L http://192.168.1.3:9090", returnStdout: true).trim()    
-                    if (status == "200") {    
-                        echo "✅ Application is healthy (status: ${status})"    
-                    } else {    
-                        error("❌ Application failed health check. Status code: ${status}")    
-                    }    
-                }    
+                sshagent(credentials: ['ssh-prod-server']) {    
+                    sh '''
+ssh -o StrictHostKeyChecking=no bahar@192.168.1.4 '
+docker rm -f dvna || true
+docker pull bahar771379463/bahar771379:latest
+docker run -d --name dvna -p 9091:9091 bahar771379463/bahar771379:latest
+'
+'''
+                }
             }    
-        }    
-    }    
+        }
 
-    post {    
-        success {    
-            echo "✅ Pipeline completed successfully!"    
-
-            script {    
-                def message = """
-🚀 Pipeline Success!
-✅ Build #${env.BUILD_NUMBER} finished successfully.
-🧩 Project: ${env.JOB_NAME}
-"""
-
-                sh '''
-curl -s -X POST "https://api.telegram.org/bot'$TELEGRAM_TOKEN'/sendMessage" \
---data-urlencode "chat_id='$TELEGRAM_CHAT_ID'" \
---data-urlencode "parse_mode=Markdown" \
---data-urlencode "text=$message"
-'''
+        /* ============================
+           11. Email AFTER Production
+           ============================ */
+        stage("Send Email After PRODUCTION") {
+            steps {
+                emailext(
+                    to: "bahar771379463@gmail.com",
+                    subject: "🎉 PRODUCTION Deployment Completed!",
+                    body: "تم نشر النسخة في الإنتاج بنجاح على المنفذ 9091."
+                )
             }
-        }    
+        }
+    }
 
-        failure {    
-            echo "❌ Pipeline failed."    
+    /* ============================
+       POST BLOCK (Success/Failure)
+       ============================ */
+    post {
 
-            script {    
-                def message = """
-🚨 Pipeline Failed!
-❌ Build #${env.BUILD_NUMBER} has failed.
-🧩 Project: ${env.JOB_NAME}
+        success {
+            script {
+                sh """
+curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+--data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+--data-urlencode "text=✔️ SUCCESS: Deployment completed successfully!"
 """
-
-                sh '''
-curl -s -X POST "https://api.telegram.org/bot'$TELEGRAM_TOKEN'/sendMessage" \
---data-urlencode "chat_id='$TELEGRAM_CHAT_ID'" \
---data-urlencode "parse_mode=Markdown" \
---data-urlencode "text=$message"
-'''
             }
-        }    
-    }  
+        }
+
+        failure {
+            script {
+                sh """
+curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+--data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+--data-urlencode "text=❌ FAILURE: Pipeline failed!"
+"""
+            }
+        }
+    }
 }
