@@ -223,6 +223,27 @@ docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
                 input message: "⚠️ هل تريد نشر النسخة في بيئة PRODUCTION ؟", ok: "نعم استمر"
             }
         }
+        stage('Deploy to PRODUCTION Server') {  
+            steps {  
+                sshagent(credentials: ['ssh-prod-server']) {  
+                    sh """
+ssh -o StrictHostKeyChecking=no bahar@192.168.1.4 '
+OLD_CONTAINERS=\$(docker ps -aq -f name=${CONTAINER_NAME})
+if [ ! -z "\$OLD_CONTAINERS" ]; then
+    echo "🧹 Removing old container(s)..."
+    docker rm -f \$OLD_CONTAINERS
+fi
+
+echo "📦 Pulling latest image..."
+docker pull ${IMAGE_NAME}
+
+echo "🚀 Running container..."
+docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
+'
+                    """
+                }  
+            }  
+        }  
 
         // ✅ مرحلة Production Deployment الجديدة
         stage('Deploy to Production') {
