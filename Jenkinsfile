@@ -318,12 +318,12 @@ curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 🧩 Project: ${env.JOB_NAME}  
 🔗 [View Logs](${env.BUILD_URL})  
 """  
-                sh """
+                sh '''
 curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
 --data-urlencode "text=$(echo \"$message\")"
-"""
+'''
             }  
         }  
     }  
