@@ -259,12 +259,12 @@ docker run -d --name ${CONTAINER_NAME} -p 80:9090 ${IMAGE_NAME}
 ✅ Build #${env.BUILD_NUMBER} deployed.
 🧩 Project: ${env.JOB_NAME}
 """
-                        sh """
+                        sh '''
 curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
 --data-urlencode "text=$(echo \"$message\")"
-"""
+'''
                     }
                 }
                 failure {
