@@ -170,12 +170,18 @@ pipeline {
                 }
             }
         }
+        
 
         stage('Push to Docker Hub') {  
             steps {  
                 sh "docker push ${IMAGE_NAME}"  
             }  
         }  
+        stage("Approval Before Test") {
+            steps {
+                input message: "❓ هل تريد الاستمرار إلى نشر النسخة في بيئة TEST ؟", ok: "نعم استمر"
+            }
+        }
 
         stage('Deploy to Test Server') {  
             steps {  
@@ -212,6 +218,61 @@ docker run -d --name ${CONTAINER_NAME} -p 9090:9090 ${IMAGE_NAME}
                 }  
             }  
         }  
+        stage("Approval Before PRODUCTION") {
+            steps {
+                input message: "⚠️ هل تريد نشر النسخة في بيئة PRODUCTION ؟", ok: "نعم استمر"
+            }
+        }
+
+        // ✅ مرحلة Production Deployment الجديدة
+        stage('Deploy to Production') {
+            when {
+                expression { (env.SNYK_COUNT.toInteger() + env.VULN_COUNT.toInteger()) == 0 } 
+            }
+            steps {
+                input message: "🚀 Ready to deploy to Production? Confirm to continue.", ok: "Yes, Deploy"
+                
+                sshagent(credentials: ['ssh-prod-server']) {
+                    sh """
+ssh -o StrictHostKeyChecking=no bahar@192.168.1.4 '
+OLD_CONTAINERS=\$(docker ps -aq -f name=${CONTAINER_NAME})
+if [ ! -z "\$OLD_CONTAINERS" ]; then
+    echo "🧹 Removing old container(s)..."
+    docker rm -f \$OLD_CONTAINERS
+fi
+
+echo "📦 Pulling latest image..."
+docker pull ${IMAGE_NAME}
+
+echo "🚀 Running container in Production..."
+docker run -d --name ${CONTAINER_NAME} -p 80:9090 ${IMAGE_NAME}
+'
+                    """
+                }
+            }
+            post {
+                success {
+                    echo "✅ Application successfully deployed to Production!"
+                    script {
+                        def message = """
+🚀 Production Deployment Success!
+✅ Build #${env.BUILD_NUMBER} deployed.
+🧩 Project: ${env.JOB_NAME}
+"""
+                        sh """
+curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+--data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+--data-urlencode "parse_mode=Markdown" \
+--data-urlencode "text=$(echo \"$message\")"
+"""
+                    }
+                }
+                failure {
+                    echo "❌ Production deployment failed!"
+                }
+            }
+        }
+
     }  
 
     post {  
