@@ -293,12 +293,12 @@ curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 🧩 Project: ${env.JOB_NAME}  
 📄 [View Unified Security Report](${report_url})  
 """  
-                sh """
+                sh '''
 'curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \\
 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \\
 --data-urlencode "parse_mode=Markdown" \\
 --data-urlencode "text=$(echo \"$message\")"
-""" 
+'''
             }  
         }  
 
