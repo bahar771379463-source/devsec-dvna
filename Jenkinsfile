@@ -4,8 +4,8 @@ pipeline {
     environment {  
         IMAGE_NAME = "bahar771379463/bahar771379:latest"  
         CONTAINER_NAME = "dvna"  
-        GIT_REPO = "https://github.com/bahar771379463-source/devsec-dvna.git"  
-        GIT_CREDENTIALS = "github-credentials"  
+        GIT_REPO = "git://github.com/bahar771379463-source/devsec-dvna.git"  
+        GIT_CREDENTIALS = "github-ssh-credentials"  
         VAULT_ADDR = "http://192.168.1.2:8200"  
         VAULT_CRED = "vault-credentials"  
 
