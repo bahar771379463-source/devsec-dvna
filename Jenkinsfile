@@ -25,7 +25,7 @@ pipeline {
             steps {  
                 sh '''  
                     mkdir -p contrib /var/lib/trivy
-                    curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o contrib/html.tpl  
+                    wget -q https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o contrib/html.tpl  
                 '''  
             }  
         } 
