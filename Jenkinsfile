@@ -21,15 +21,14 @@ pipeline {
             }  
         }  
 
-     stage('Initialize Trivy Template') {
-    steps {
-        sh '''
-            mkdir -p contrib /var/lib/trivy
-            cp trivy-html.tpl contrib/html.tpl
-            echo "✅ Using local Trivy template"
-        '''
-    }
-}
+       stage('Initialize Trivy Template') {  
+            steps {  
+                sh '''  
+                    mkdir -p contrib /var/lib/trivy
+                    curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o contrib/html.tpl  
+                '''  
+            }  
+        } 
         stage('Fetch DockerHub Credentials from Vault') {  
             steps {  
                 withVault([vaultSecrets: [[path: 'secret/docker-credentials', secretValues: [  
